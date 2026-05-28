@@ -1,0 +1,68 @@
+Screen {
+    background: #0a0a0f;
+    color: #e0e0e8;
+}
+
+Header {
+    background: #14141c;
+    color: #ffd56b;
+    text-style: bold;
+}
+
+Footer {
+    background: #14141c;
+    color: #7a7a8a;
+}
+
+#metals {
+    layout: horizontal;
+    height: 1fr;
+    padding: 1 2;
+}
+
+MetalPanel {
+    width: 1fr;
+    height: 1fr;
+    border: round #2a2a3a;
+    padding: 0 2 1 2;
+    margin: 0 1;
+    background: #10101a;
+}
+
+MetalPanel.-gold {
+    border: round #ffd56b;
+    border-title-color: #ffd56b;
+    border-title-style: bold;
+    border-title-align: left;
+}
+
+MetalPanel.-silver {
+    border: round #c0c0d0;
+    border-title-color: #d4d4e0;
+    border-title-style: bold;
+    border-title-align: left;
+}
+
+MetalPanel > #updated {
+    dock: top;
+    height: 1;
+    color: #7a7a8a;
+    text-align: right;
+}
+
+MetalPanel > #header {
+    height: 1;
+}
+
+MetalPanel > .change-row {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: #14141c;
+    color: #7a7a8a;
+    padding: 0 2;
+}

@@ -1,0 +1,22 @@
+[project]
+name = "goldsilver"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Dawid", email = "dawid@bahnhof.se" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.13.4",
+    "textual>=8.2.7",
+    "textual-plotext>=1.0.1",
+    "yfinance>=1.4.0",
+]
+
+[project.scripts]
+goldsilver = "goldsilver:main"
+
+[build-system]
+requires = ["uv_build>=0.11.9,<0.12.0"]
+build-backend = "uv_build"
