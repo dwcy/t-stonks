@@ -205,6 +205,48 @@ NewsPanel {
     background: #10101a;
 }
 
+CongressPanel {
+    height: auto;
+    min-height: 14;
+    border: round #2a2a3a;
+    border-title-color: #e0e0e8;
+    border-title-style: bold;
+    border-title-align: left;
+    border-subtitle-color: #7a7a8a;
+    border-subtitle-align: right;
+    margin: 0 2;
+    padding: 0 1;
+    background: #10101a;
+}
+
+InsiderPanel {
+    height: auto;
+    min-height: 10;
+    border: round #4a3a5a;
+    border-title-color: #bb9af7;
+    border-title-style: bold;
+    border-title-align: left;
+    border-subtitle-color: #7a7a8a;
+    border-subtitle-align: right;
+    margin: 0 2;
+    padding: 0 1;
+    background: #10101a;
+}
+
+StockTwitsPanel {
+    height: auto;
+    min-height: 10;
+    border: round #2a3a4a;
+    border-title-color: #7dcfff;
+    border-title-style: bold;
+    border-title-align: left;
+    border-subtitle-color: #7a7a8a;
+    border-subtitle-align: right;
+    margin: 0 2;
+    padding: 0 1;
+    background: #10101a;
+}
+
 #status-bar {
     dock: bottom;
     height: 1;

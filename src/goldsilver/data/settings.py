@@ -69,6 +69,9 @@ class AppSettings:
     signal_mode: SignalMode = "MOMENTUM"
     show_news_markets: bool = True
     show_news_trump: bool = True
+    show_congress_trades: bool = True
+    show_insider_trades: bool = True
+    show_stocktwits: bool = True
     gold_color_name: str = DEFAULT_GOLD
     silver_color_name: str = DEFAULT_SILVER
     metals_columns: int = 2

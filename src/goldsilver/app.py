@@ -12,24 +12,32 @@ from textual.widgets import Footer, Header, Static
 from goldsilver.data import (
     CalendarService,
     CommodityService,
+    CongressTradesService,
     FxService,
+    InsiderTradesService,
     MetalsService,
     NewsService,
     OmxService,
+    ReturnsCalculator,
     StockService,
+    StockTwitsService,
     TrumpService,
+    compute_politician_stats,
 )
 from goldsilver.data.models import GOLD, SILVER, Bar, Tick
 from goldsilver.data.models_macro import (
     CalendarSnapshot,
     CommodityQuote,
     CommoditySymbol,
+    CongressTrade,
     FxPair,
     FxRate,
+    InsiderTrade,
     NewsItem,
     OmxSnapshot,
     Signal,
     StockQuote,
+    StockTwitMessage,
 )
 from goldsilver.data.settings import AppSettings
 from goldsilver.data.signal_strategies import (
@@ -42,15 +50,18 @@ from goldsilver.data.session import stockholm_midnight_utc
 from goldsilver.widgets import (
     CalendarPanel,
     CommodityTile,
+    CongressPanel,
     DisconnectScreen,
     EditMathScreen,
     FxTile,
+    InsiderPanel,
     MetalPanel,
     NewsPanel,
     OmxStrip,
     PlotSettings,
     PlotSettingsScreen,
     StockRow,
+    StockTwitsPanel,
     build_edit_data,
 )
 from goldsilver.widgets.chart import ChartKind
@@ -134,6 +145,22 @@ class GoldSilverApp(App[None]):
             tickers=list(self._settings.stock_tickers),
             handler=self._on_stock_quotes,
             stale_handler=self._on_stock_stale,
+        )
+        self._congress_panel: CongressPanel | None = None
+        self._congress_service = CongressTradesService(
+            handler=self._on_congress_trades,
+            stale_handler=self._on_congress_stale,
+        )
+        self._returns_calc = ReturnsCalculator()
+        self._insider_panel: InsiderPanel | None = None
+        self._insider_service = InsiderTradesService(
+            handler=self._on_insider_trades,
+            stale_handler=self._on_insider_stale,
+        )
+        self._stocktwits_panel: StockTwitsPanel | None = None
+        self._stocktwits_service = StockTwitsService(
+            handler=self._on_stocktwits,
+            stale_handler=self._on_stocktwits_stale,
         )
         self._strategies: list[SignalStrategy] = build_strategies()
         self._strategy_by_name: dict[str, SignalStrategy] = {
@@ -219,6 +246,21 @@ class GoldSilverApp(App[None]):
             news = NewsPanel("Markets news")
             self._news_panel = news
             yield news
+            stocktwits = StockTwitsPanel()
+            self._stocktwits_panel = stocktwits
+            if not self._settings.show_stocktwits:
+                stocktwits.display = False
+            yield stocktwits
+            insider = InsiderPanel()
+            self._insider_panel = insider
+            if not self._settings.show_insider_trades:
+                insider.display = False
+            yield insider
+            congress = CongressPanel("Congress trades")
+            self._congress_panel = congress
+            if not self._settings.show_congress_trades:
+                congress.display = False
+            yield congress
         yield Static("", id="status-bar")
         yield Footer()
 
@@ -233,6 +275,9 @@ class GoldSilverApp(App[None]):
         self._trump_service.start()
         self._omx_service.start()
         self._stock_service.start()
+        self._congress_service.start()
+        self._insider_service.start()
+        self._stocktwits_service.start()
         self._seed_all()
 
     async def on_unmount(self) -> None:
@@ -244,6 +289,9 @@ class GoldSilverApp(App[None]):
         await self._trump_service.stop()
         await self._omx_service.stop()
         await self._stock_service.stop()
+        await self._congress_service.stop()
+        await self._insider_service.stop()
+        await self._stocktwits_service.stop()
 
     def _seed_all(self) -> None:
         for symbol, panel in self._panels.items():
@@ -495,6 +543,33 @@ class GoldSilverApp(App[None]):
         if self._stock_row is not None:
             self._stock_row.mark_stale(since)
 
+    async def _on_congress_trades(self, trades: list[CongressTrade]) -> None:
+        if self._congress_panel is None:
+            return
+        returns = await self._returns_calc.compute(trades)
+        stats = compute_politician_stats(trades, returns, window_days=30)
+        self._congress_panel.replace_data(trades, stats, returns)
+
+    async def _on_congress_stale(self, since: datetime) -> None:
+        if self._congress_panel is not None:
+            self._congress_panel.mark_stale(since)
+
+    async def _on_insider_trades(self, trades: list[InsiderTrade]) -> None:
+        if self._insider_panel is not None:
+            self._insider_panel.replace_trades(trades)
+
+    async def _on_insider_stale(self, since: datetime) -> None:
+        if self._insider_panel is not None:
+            self._insider_panel.mark_stale(since)
+
+    async def _on_stocktwits(self, messages: list[StockTwitMessage]) -> None:
+        if self._stocktwits_panel is not None:
+            self._stocktwits_panel.replace_messages(messages)
+
+    async def _on_stocktwits_stale(self, since: datetime) -> None:
+        if self._stocktwits_panel is not None:
+            self._stocktwits_panel.mark_stale(since)
+
     def _mark_event_on_charts(self, color: tuple[int, int, int]) -> None:
         for symbol, panel in self._panels.items():
             last = self._last_price.get(symbol)
@@ -538,6 +613,9 @@ class GoldSilverApp(App[None]):
             show_day_refs=self._show_day_refs,
             show_news_markets=self._settings.show_news_markets,
             show_news_trump=self._settings.show_news_trump,
+            show_congress_trades=self._settings.show_congress_trades,
+            show_insider_trades=self._settings.show_insider_trades,
+            show_stocktwits=self._settings.show_stocktwits,
             gold_color_name=self._settings.gold_color_name,
             silver_color_name=self._settings.silver_color_name,
             metals_columns=self._settings.metals_columns,
@@ -606,6 +684,9 @@ class GoldSilverApp(App[None]):
         await self._trump_service.refresh_now()
         await self._omx_service.refresh_now()
         await self._stock_service.refresh_now()
+        await self._congress_service.refresh_now()
+        await self._insider_service.refresh_now()
+        await self._stocktwits_service.refresh_now()
 
     def action_cycle_zoom(self) -> None:
         if self._chart_mode != "live":
@@ -685,6 +766,15 @@ class GoldSilverApp(App[None]):
             settings.show_news_markets != self._settings.show_news_markets
             or settings.show_news_trump != self._settings.show_news_trump
         )
+        congress_changed = (
+            settings.show_congress_trades != self._settings.show_congress_trades
+        )
+        insider_changed = (
+            settings.show_insider_trades != self._settings.show_insider_trades
+        )
+        stocktwits_changed = (
+            settings.show_stocktwits != self._settings.show_stocktwits
+        )
         gold_changed = settings.gold_color_name != self._settings.gold_color_name
         silver_changed = (
             settings.silver_color_name != self._settings.silver_color_name
@@ -713,6 +803,9 @@ class GoldSilverApp(App[None]):
         self._settings.show_day_refs = settings.show_day_refs
         self._settings.show_news_markets = settings.show_news_markets
         self._settings.show_news_trump = settings.show_news_trump
+        self._settings.show_congress_trades = settings.show_congress_trades
+        self._settings.show_insider_trades = settings.show_insider_trades
+        self._settings.show_stocktwits = settings.show_stocktwits
         self._settings.gold_color_name = settings.gold_color_name
         self._settings.silver_color_name = settings.silver_color_name
         self._settings.metals_columns = settings.metals_columns
@@ -726,6 +819,12 @@ class GoldSilverApp(App[None]):
 
         if news_changed:
             self._apply_news_panel()
+        if congress_changed and self._congress_panel is not None:
+            self._congress_panel.display = self._settings.show_congress_trades
+        if insider_changed and self._insider_panel is not None:
+            self._insider_panel.display = self._settings.show_insider_trades
+        if stocktwits_changed and self._stocktwits_panel is not None:
+            self._stocktwits_panel.display = self._settings.show_stocktwits
         if gold_changed and GOLD in self._panels:
             self._panels[GOLD].set_accent(self._settings.gold_rgb())
         if silver_changed and SILVER in self._panels:

@@ -140,6 +140,7 @@ NewsSource = Literal[
     "REUTERS", "CNBC", "WllStrtJrnl", "BLOOMBERG", "POLITICO", "YAHOO", "FOX",
     "DgnsIndstr", "SVT", "BREAKIT", "AffrsVrldn",
     "REDEYE", "BrsKlln", "Placera", "EFN", "TRUMP",
+    "WHITEHOUSE", "PressTV", "IRNA", "MEHR",
 ]
 
 
@@ -191,6 +192,132 @@ class CommodityQuote(BaseModel):
         if self.previous_close == 0.0:
             return 0.0
         return (self.price - self.previous_close) / self.previous_close * 100.0
+
+
+Party = Literal["R", "D", "I"]
+TradeSide = Literal["BUY", "SELL", "EXCHANGE"]
+Chamber = Literal["HOUSE", "SENATE"]
+
+
+class CongressTrade(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    politician: str
+    party: Party
+    chamber: Chamber
+    ticker: str
+    asset_name: str = ""
+    side: TradeSide
+    size_bucket: str
+    traded_at: datetime
+    filed_at: datetime | None = None
+
+    @field_validator("traded_at")
+    @classmethod
+    def _traded_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("traded_at must be timezone-aware")
+        return v.astimezone(timezone.utc)
+
+    @field_validator("filed_at")
+    @classmethod
+    def _filed_tz(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            raise ValueError("filed_at must be timezone-aware")
+        return v.astimezone(timezone.utc)
+
+    @field_validator("politician", "ticker", "size_bucket")
+    @classmethod
+    def _non_empty(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("must be non-empty")
+        return stripped
+
+
+InsiderSide = Literal["BUY", "SELL", "OTHER"]
+Sentiment = Literal["BULL", "BEAR"]
+
+
+class StockTwitMessage(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    user_username: str
+    user_followers: int = 0
+    body: str
+    sentiment: Sentiment | None = None
+    tickers: tuple[str, ...] = ()
+    created_at: datetime
+    source_ticker: str
+
+    @field_validator("created_at")
+    @classmethod
+    def _tz_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("created_at must be timezone-aware")
+        return v.astimezone(timezone.utc)
+
+    @field_validator("user_username", "body", "source_ticker")
+    @classmethod
+    def _non_empty(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("must be non-empty")
+        return stripped
+
+
+class InsiderTrade(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    issuer_ticker: str
+    issuer_name: str
+    insider_name: str
+    insider_role: str
+    transaction_date: datetime
+    code: str
+    side: InsiderSide
+    shares: float | None = None
+    price_per_share: float | None = None
+    value_usd: float | None = None
+    accession: str
+
+    @field_validator("transaction_date")
+    @classmethod
+    def _tx_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("transaction_date must be timezone-aware")
+        return v.astimezone(timezone.utc)
+
+    @field_validator("issuer_ticker", "insider_name", "accession", "code")
+    @classmethod
+    def _non_empty(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("must be non-empty")
+        return stripped
+
+
+class PoliticianStats(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    politician: str
+    party: Party
+    chamber: Chamber
+    trade_count: int
+    buy_count: int
+    avg_return_pct: float | None
+    win_rate_pct: float | None
+    last_trade_at: datetime
+
+    @field_validator("last_trade_at")
+    @classmethod
+    def _tz_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("last_trade_at must be timezone-aware")
+        return v.astimezone(timezone.utc)
 
 
 class StockQuote(BaseModel):

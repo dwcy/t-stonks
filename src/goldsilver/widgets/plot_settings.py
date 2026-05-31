@@ -31,6 +31,9 @@ class PlotSettings:
     show_day_refs: bool
     show_news_markets: bool
     show_news_trump: bool
+    show_congress_trades: bool
+    show_insider_trades: bool
+    show_stocktwits: bool
     gold_color_name: str
     silver_color_name: str
     metals_columns: int
@@ -163,6 +166,30 @@ class PlotSettingsScreen(ModalScreen[None]):
                             id="setting-news-trump",
                         )
                         yield Label("Trump posts", classes="switch-label")
+                    with Horizontal(classes="switch-row"):
+                        yield Switch(
+                            value=self._state.show_congress_trades,
+                            id="setting-congress-trades",
+                        )
+                        yield Label("Congress trades", classes="switch-label")
+                    with Horizontal(classes="switch-row"):
+                        yield Switch(
+                            value=self._state.show_insider_trades,
+                            id="setting-insider-trades",
+                        )
+                        yield Label(
+                            "Trump Media insiders (SEC Form 4)",
+                            classes="switch-label",
+                        )
+                    with Horizontal(classes="switch-row"):
+                        yield Switch(
+                            value=self._state.show_stocktwits,
+                            id="setting-stocktwits",
+                        )
+                        yield Label(
+                            "StockTwits chatter",
+                            classes="switch-label",
+                        )
                 with Vertical(classes="setting-group"):
                     yield Label("Gold color", classes="setting-label")
                     with RadioSet(id="setting-gold-color"):
@@ -253,6 +280,24 @@ class PlotSettingsScreen(ModalScreen[None]):
             and v != self._state.show_news_trump
         ):
             self._state.show_news_trump = v
+            self._emit()
+        elif (
+            sw_id == "setting-congress-trades"
+            and v != self._state.show_congress_trades
+        ):
+            self._state.show_congress_trades = v
+            self._emit()
+        elif (
+            sw_id == "setting-insider-trades"
+            and v != self._state.show_insider_trades
+        ):
+            self._state.show_insider_trades = v
+            self._emit()
+        elif (
+            sw_id == "setting-stocktwits"
+            and v != self._state.show_stocktwits
+        ):
+            self._state.show_stocktwits = v
             self._emit()
         elif sw_id.startswith("setting-show-"):
             for name in self._strategy_names:

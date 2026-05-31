@@ -44,6 +44,10 @@ _SOURCE_STYLE = {
     "BrsKlln": "#42a5f5",
     "EFN": "#ffb74d",
     "TRUMP": "#bb9af7",
+    "WHITEHOUSE": "#e0e0e8",
+    "PressTV": "#4caf50",
+    "IRNA": "#66bb6a",
+    "MEHR": "#81c784",
 }
 
 

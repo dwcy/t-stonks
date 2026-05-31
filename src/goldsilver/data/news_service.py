@@ -79,6 +79,22 @@ NEWS_FEEDS: tuple[tuple[NewsSource, str], ...] = (
         "EFN",
         "https://www.efn.se/rss",
     ),
+    (
+        "WHITEHOUSE",
+        "https://www.whitehouse.gov/news/feed/",
+    ),
+    (
+        "PressTV",
+        "https://www.presstv.ir/rss.xml",
+    ),
+    (
+        "IRNA",
+        "https://en.irna.ir/rss",
+    ),
+    (
+        "MEHR",
+        "https://en.mehrnews.com/rss",
+    ),
 )
 TRUMP_FEED_URL = "https://trumpstruth.org/feed"
 _USER_AGENT = (
@@ -99,6 +115,7 @@ _PLACEHOLDER_LEAD_PATTERNS = (
     re.compile(r"^breaking( news)? on .+", re.IGNORECASE),
     re.compile(r"^news from .+", re.IGNORECASE),
 )
+_URL_DATE_RE = re.compile(r"/(\d{4})/(\d{2})/(\d{2})/")
 
 
 def _is_placeholder(title: str) -> bool:
@@ -192,7 +209,7 @@ class NewsService(_FeedService):
         stale_handler: NewsStaleHandler | None = None,
         *,
         refresh_interval_s: float = NEWS_REFRESH_INTERVAL_S,
-        max_items: int = 60,
+        max_items: int = 200,
         per_source_cap: int = 5,
     ) -> None:
         super().__init__(handler, stale_handler, refresh_interval_s, "news-loop")
@@ -286,13 +303,15 @@ def _parse_rss(
             if not stripped:
                 continue
             title = stripped
-        if not title or not link or not pub_text:
+        if not title or not link:
             continue
         if _is_placeholder(title):
             continue
-        published = _parse_pub_date(pub_text)
+        published = _parse_pub_date(pub_text) if pub_text else None
         if published is None:
-            continue
+            published = _date_from_url(link)
+        if published is None:
+            published = datetime.now(timezone.utc)
         try:
             items.append(
                 NewsItem(
@@ -305,3 +324,20 @@ def _parse_rss(
         except ValidationError:
             continue
     return items
+
+
+def _date_from_url(url: str) -> datetime | None:
+    m = _URL_DATE_RE.search(url)
+    if not m:
+        return None
+    try:
+        return datetime(
+            int(m.group(1)),
+            int(m.group(2)),
+            int(m.group(3)),
+            12,
+            0,
+            tzinfo=timezone.utc,
+        )
+    except ValueError:
+        return None
