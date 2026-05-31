@@ -3,6 +3,11 @@ Screen {
     color: #e0e0e8;
 }
 
+#main-scroll {
+    width: 100%;
+    height: 1fr;
+}
+
 Header {
     background: #14141c;
     color: #ffd56b;
@@ -15,16 +20,31 @@ Footer {
 }
 
 #metals {
-    layout: horizontal;
-    height: 1fr;
-    padding: 1 2;
+    height: auto;
+    padding: 1 2 0 2;
+}
+
+#metals.cards-1 {
+    grid-size: 1 2;
+}
+
+#metals.cards-2 {
+    grid-size: 2;
+}
+
+#metals.cards-3 {
+    grid-size: 3;
+}
+
+#metals.cards-4 {
+    grid-size: 4;
 }
 
 MetalPanel {
     width: 1fr;
-    height: 1fr;
+    height: auto;
     border: round #2a2a3a;
-    padding: 0 2 1 2;
+    padding: 0 2 0 2;
     margin: 0 1;
     background: #10101a;
 }
@@ -56,7 +76,133 @@ MetalPanel > #header {
 
 MetalPanel > .change-row {
     height: 1;
-    margin-bottom: 1;
+}
+
+MetalPanel > .stats-row {
+    height: 1;
+    color: #a0a0b0;
+}
+
+MetalPanel > .indicators-row {
+    height: 1;
+    color: #a0a0b0;
+}
+
+MetalPanel > #signal-rows {
+    height: auto;
+}
+
+MetalPanel .signal-row {
+    height: 1;
+}
+
+#macro-strip {
+    layout: horizontal;
+    height: 1;
+    padding: 0 2;
+    background: #14141c;
+}
+
+.fx-tile, .commodity-tile {
+    width: 1fr;
+    height: 1;
+    content-align: left middle;
+}
+
+CalendarPanel {
+    layout: horizontal;
+    height: auto;
+    min-height: 8;
+    border: round #2a2a3a;
+    border-title-color: #e0e0e8;
+    border-title-style: bold;
+    border-title-align: left;
+    border-subtitle-color: #7a7a8a;
+    border-subtitle-align: right;
+    padding: 0 1;
+    margin: 0 2 0 2;
+    background: #10101a;
+}
+
+CalendarPanel .calendar-section {
+    width: 1fr;
+    height: 100%;
+    padding: 0 1;
+}
+
+CalendarPanel .calendar-section.-upcoming {
+    border-left: vkey #2a2a3a;
+}
+
+CalendarPanel .calendar-compact {
+    display: none;
+}
+
+CalendarPanel.-compact {
+    height: 3;
+    min-height: 3;
+}
+
+CalendarPanel.-compact .calendar-section {
+    display: none;
+}
+
+CalendarPanel.-compact .calendar-compact {
+    display: block;
+    height: 1;
+    width: 100%;
+    padding: 0 1;
+    color: #a0a0b0;
+}
+
+OmxStrip {
+    height: 1;
+    padding: 0 2;
+    background: #14141c;
+    content-align: left middle;
+    margin: 0 2;
+}
+
+StockRow {
+    height: 7;
+    margin: 0 2;
+    padding: 0;
+    grid-rows: 7;
+    grid-gutter: 0 1;
+}
+
+StockRow.cols-1 { grid-size: 1 1; }
+StockRow.cols-2 { grid-size: 2 1; }
+StockRow.cols-3 { grid-size: 3 1; }
+StockRow.cols-4 { grid-size: 4 1; }
+StockRow.cols-5 { grid-size: 5 1; }
+StockRow.cols-6 { grid-size: 6 1; }
+
+StockTile {
+    width: 1fr;
+    height: 7;
+    border: round #2a2a3a;
+    padding: 0 1;
+    background: #10101a;
+}
+
+StockTile > #stock-head {
+    height: 1;
+    color: #e0e0e8;
+}
+
+NewsPanel {
+    height: auto;
+    min-height: 14;
+    border: round #2a2a3a;
+    border-title-color: #e0e0e8;
+    border-title-style: bold;
+    border-title-align: left;
+    border-subtitle-color: #7a7a8a;
+    border-subtitle-align: right;
+    margin: 0 2;
+    padding: 0 1;
+    background: #10101a;
 }
 
 #status-bar {
@@ -65,4 +211,201 @@ MetalPanel > .change-row {
     background: #14141c;
     color: #7a7a8a;
     padding: 0 2;
+}
+
+PlotSettingsScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+#plot-settings-dialog {
+    width: 56;
+    height: 90%;
+    padding: 1 2;
+    background: #14141c;
+    border: round #ffd56b;
+    layout: vertical;
+}
+
+#plot-settings-title {
+    dock: top;
+    width: 100%;
+    height: 1;
+    color: #ffd56b;
+    text-style: bold;
+    content-align: left middle;
+    margin-bottom: 1;
+}
+
+#plot-settings-body {
+    height: 1fr;
+    width: 100%;
+}
+
+PlotSettingsScreen .setting-group {
+    height: auto;
+    margin-bottom: 1;
+}
+
+PlotSettingsScreen .setting-label {
+    height: 1;
+    color: #a0a0b0;
+    text-style: bold;
+}
+
+PlotSettingsScreen RadioSet {
+    background: #10101a;
+    border: none;
+    padding: 0 1;
+    height: auto;
+}
+
+PlotSettingsScreen .switch-row {
+    height: 3;
+    align: left middle;
+}
+
+PlotSettingsScreen .switch-row Switch {
+    margin: 0 1 0 0;
+}
+
+PlotSettingsScreen .switch-label {
+    height: 3;
+    content-align: left middle;
+    color: #e0e0e8;
+}
+
+#setting-close {
+    margin-top: 1;
+    width: 100%;
+}
+
+DisconnectScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+#disconnect-dialog {
+    width: 56;
+    height: auto;
+    padding: 1 2;
+    background: #1a0a0a;
+    border: heavy #ff4a4a;
+}
+
+#disconnect-title {
+    width: 100%;
+    height: 1;
+    text-style: bold;
+    color: #ff6b6b;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
+#disconnect-body, #disconnect-retry, #disconnect-hint {
+    width: 100%;
+    height: 1;
+    content-align: center middle;
+}
+
+#disconnect-body {
+    color: #d0a0a0;
+}
+
+#disconnect-retry {
+    color: #ff8a8a;
+    text-style: bold;
+    margin-top: 1;
+}
+
+#disconnect-hint {
+    margin-top: 1;
+    color: #7a4a4a;
+}
+
+PlotSettingsScreen .sub-label {
+    color: #7a7a8a;
+    height: 1;
+    margin-top: 1;
+}
+
+#open-edit-math {
+    width: 100%;
+    margin-top: 1;
+}
+
+EditMathScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+#edit-math-dialog {
+    width: 70;
+    height: 90%;
+    padding: 1 2;
+    background: #14141c;
+    border: round #ffd56b;
+    layout: vertical;
+}
+
+#edit-math-title {
+    dock: top;
+    width: 100%;
+    height: 1;
+    color: #ffd56b;
+    text-style: bold;
+    content-align: left middle;
+    margin-bottom: 1;
+}
+
+#edit-math-body {
+    height: 1fr;
+    width: 100%;
+}
+
+EditMathScreen .math-group {
+    height: auto;
+    margin-bottom: 1;
+    border-top: solid #2a2a3a;
+    padding-top: 1;
+}
+
+EditMathScreen .math-header {
+    height: 3;
+    align: left middle;
+}
+
+EditMathScreen .math-group-label {
+    width: 1fr;
+    height: 3;
+    text-style: bold;
+    color: #ffd56b;
+    content-align: left middle;
+}
+
+EditMathScreen .math-reset {
+    width: 10;
+    height: 3;
+}
+
+EditMathScreen .math-field {
+    height: 3;
+    align: left middle;
+}
+
+EditMathScreen .math-field-label {
+    width: 24;
+    height: 3;
+    color: #c0c0d0;
+    content-align: left middle;
+}
+
+EditMathScreen .math-input {
+    width: 1fr;
+    height: 3;
+}
+
+#edit-math-close {
+    margin-top: 1;
+    width: 100%;
 }

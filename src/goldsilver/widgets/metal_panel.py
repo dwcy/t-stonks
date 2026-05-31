@@ -4,12 +4,14 @@ from datetime import datetime
 
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.color import Color
 from textual.containers import Vertical
 from textual.reactive import reactive
 from textual.widgets import Static
 
 from goldsilver.data.models import Bar, Tick
-from goldsilver.widgets.chart import PriceChart
+from goldsilver.data.models_macro import Signal
+from goldsilver.widgets.chart import ChartKind, ChartMode, ChartZoom, PriceChart
 
 
 def _rgb(color: tuple[int, int, int] | str) -> str:
@@ -17,6 +19,20 @@ def _rgb(color: tuple[int, int, int] | str) -> str:
         return color
     r, g, b = color
     return f"rgb({r},{g},{b})"
+
+
+_STRATEGY_SHORT_LABELS: dict[str, str] = {
+    "Slope Momentum": "Slope",
+    "Bollinger Recoil": "BB",
+    "ROC Momentum": "ROC",
+    "RSI Recoil": "RSI",
+    "MACD Momentum": "MACD",
+    "Z-Score Recoil": "Z",
+}
+
+
+def _short_strategy_label(name: str) -> str:
+    return _STRATEGY_SHORT_LABELS.get(name, name.split()[0])
 
 
 class MetalPanel(Vertical):
@@ -39,6 +55,9 @@ class MetalPanel(Vertical):
         self.symbol = symbol
         self._accent = _rgb(accent_color)
         self.border_title = label
+        self._signals: dict[str, Signal | None] = {}
+        self._visible_signals: list[str] = []
+        self._stats: dict[str, float] | None = None
 
     def compose(self) -> ComposeResult:
         yield Static("--:--:--", id="updated", classes="updated")
@@ -54,9 +73,57 @@ class MetalPanel(Vertical):
         return self._accent
 
     def seed_history(
-        self, bars: list[Bar], *, x_origin: datetime | None = None
+        self,
+        bars: list[Bar],
+        *,
+        x_origin: datetime | None = None,
+        chart_kind: ChartKind = "line",
+        show_sma: bool = True,
+        show_vwap: bool = False,
+        show_day_refs: bool = False,
     ) -> None:
-        self.query_one(PriceChart).seed(bars, x_origin=x_origin)
+        self.query_one(PriceChart).seed(
+            bars,
+            x_origin=x_origin,
+            kind=chart_kind,
+            show_sma=show_sma,
+            show_vwap=show_vwap,
+            show_day_refs=show_day_refs,
+        )
+
+    def set_accent(self, rgb: tuple[int, int, int]) -> None:
+        self._accent = _rgb(rgb)
+        color = Color(*rgb)
+        self.styles.border = ("round", color)
+        self.styles.border_title_color = color
+        chart = self.query_one(PriceChart)
+        chart.set_color(rgb)
+        self._refresh_header()
+        self._refresh_change_row()
+
+    def apply_chart_features(
+        self,
+        *,
+        chart_kind: ChartKind,
+        show_sma: bool,
+        show_vwap: bool,
+        show_day_refs: bool,
+    ) -> None:
+        self.query_one(PriceChart).apply_features(
+            kind=chart_kind,
+            show_sma=show_sma,
+            show_vwap=show_vwap,
+            show_day_refs=show_day_refs,
+        )
+
+    def set_visible_signals(self, names: list[str]) -> None:
+        self._visible_signals = list(names)
+        self._refresh_indicators()
+
+    def apply_signal(self, signal: Signal) -> None:
+        self._signals[signal.strategy] = signal
+        if signal.strategy in self._visible_signals:
+            self._refresh_indicators()
 
     def apply_tick(self, tick: Tick) -> None:
         self.price = tick.price
@@ -66,7 +133,103 @@ class MetalPanel(Vertical):
         self.day_low = tick.day_low
         self.updated_at = tick.time
         chart = self.query_one(PriceChart)
+        chart.apply_session_refs(tick.prev_close, tick.day_high, tick.day_low)
         chart.add_point(tick.price, tick.time)
+
+    def add_marker(
+        self,
+        price: float,
+        time: datetime,
+        color: tuple[int, int, int],
+        *,
+        heavy: bool = False,
+    ) -> None:
+        self.query_one(PriceChart).add_marker(
+            price, time, color, heavy=heavy
+        )
+
+    def clear_markers(self) -> None:
+        self.query_one(PriceChart).clear_markers()
+
+    def set_stats(
+        self,
+        *,
+        week_high: float,
+        week_low: float,
+        week_avg: float,
+        month_avg: float,
+        year_avg: float,
+    ) -> None:
+        self._stats = {
+            "wh": week_high,
+            "wl": week_low,
+            "w": week_avg,
+            "m": month_avg,
+            "y": year_avg,
+        }
+        self._refresh_header()
+
+    def _refresh_indicators(self) -> None:
+        self._refresh_change_row()
+
+    def _render_indicators(self) -> Text:
+        if not self._visible_signals:
+            return Text("")
+        parts: list[tuple[str, str]] = []
+        for i, name in enumerate(self._visible_signals):
+            if i > 0:
+                parts.append(("  ·  ", "#3a3a4a"))
+            label = _short_strategy_label(name)
+            sig = self._signals.get(name)
+            label_color = (
+                "dim #bb9af7" if sig is not None and sig.kind == "recoil"
+                else "dim #7dcfff"
+            )
+            parts.append((f"{label} ", label_color))
+            if sig is None:
+                parts.append(("warming up", "dim #5a5a6a"))
+                continue
+            if sig.action == "BUY":
+                parts.append(("▲ BUY", "bold #7dff8c"))
+                parts.append((f" {sig.intensity_sigma:.1f}σ", "#7dff8c"))
+            elif sig.action == "SELL":
+                parts.append(("▼ SELL", "bold #ff6b6b"))
+                parts.append((f" {sig.intensity_sigma:.1f}σ", "#ff6b6b"))
+            else:
+                parts.append(("· idle", "dim #7a7a8a"))
+        return Text.assemble(*parts)
+
+    def set_chart_zoom(self, zoom: ChartZoom) -> None:
+        self.query_one(PriceChart).set_zoom(zoom)
+
+    def cycle_chart_zoom(self) -> None:
+        self.query_one(PriceChart).cycle_zoom()
+
+    def set_chart_mode(self, mode: ChartMode) -> None:
+        self.query_one(PriceChart).set_mode(mode)
+
+    def cycle_chart_mode(self) -> None:
+        self.query_one(PriceChart).cycle_mode()
+
+    def toggle_crosshair(self) -> None:
+        self.query_one(PriceChart).toggle_crosshair()
+
+    def move_crosshair(self, step: int) -> None:
+        self.query_one(PriceChart).move_crosshair(step)
+
+    def pin_current(self) -> None:
+        self.query_one(PriceChart).pin_current()
+
+    def clear_pins(self) -> None:
+        self.query_one(PriceChart).clear_pins()
+
+    @property
+    def chart_zoom(self) -> ChartZoom:
+        return self.query_one(PriceChart).zoom
+
+    @property
+    def chart_mode(self) -> ChartMode:
+        return self.query_one(PriceChart).mode
 
     def watch_price(self, _: float | None) -> None:
         self._refresh_header()
@@ -100,7 +263,8 @@ class MetalPanel(Vertical):
         if self.price is None:
             return Text("waiting…", style="dim #7a7a8a")
         parts: list[tuple[str, str]] = [
-            (f"{self.price:,.2f}", f"bold {self._accent}"),
+            (f"{self.price:,.2f} ", f"bold {self._accent}"),
+            ("USD", "dim #7a7a8a"),
         ]
         if self.day_high != 0.0 or self.day_low != 0.0:
             parts.extend([
@@ -111,7 +275,23 @@ class MetalPanel(Vertical):
                 ("L ", "#7a7a8a"),
                 (f"{self.day_low:,.2f}", "#ff6b6b"),
             ])
-        return Text.assemble(*parts)
+        text = Text.assemble(*parts)
+        if self._stats is not None:
+            s = self._stats
+            text.append("   ", style="")
+            text.append("WH ", style="dim #7a7a8a")
+            text.append(f"{s['wh']:,.2f}", style="#7dff8c")
+            text.append("  WL ", style="dim #7a7a8a")
+            text.append(f"{s['wl']:,.2f}", style="#ff6b6b")
+            text.append("  W̄ ", style="dim #7a7a8a")
+            text.append(f"{s['w']:,.2f}", style="#c0c0d0")
+            text.append("  ·  ", style="#3a3a4a")
+            text.append("M̄ ", style="dim #7a7a8a")
+            text.append(f"{s['m']:,.2f}", style="#c0c0d0")
+            text.append("  ·  ", style="#3a3a4a")
+            text.append("Ȳ ", style="dim #7a7a8a")
+            text.append(f"{s['y']:,.2f}", style="#c0c0d0")
+        return text
 
     def _render_change_row(self) -> Text:
         if self.price is None:
@@ -119,13 +299,18 @@ class MetalPanel(Vertical):
         change_style = "#7dff8c" if self.change >= 0 else "#ff6b6b"
         arrow = "▲" if self.change >= 0 else "▼"
         sign = "+" if self.change >= 0 else ""
-        return Text.assemble(
+        text = Text.assemble(
             (arrow, change_style),
             (f" {sign}{self.change_percent:.2f}%", change_style),
             ("  (", change_style),
             (f"{sign}{self.change:.2f}", change_style),
             (")", change_style),
         )
+        indicators = self._render_indicators()
+        if indicators.plain:
+            text.append("    ", style="")
+            text.append_text(indicators)
+        return text
 
     def _refresh_header(self) -> None:
         widget = self.query_one_optional("#header", Static)

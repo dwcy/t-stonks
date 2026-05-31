@@ -18,6 +18,7 @@ class Tick(BaseModel):
     change_percent: float
     day_high: float
     day_low: float
+    prev_close: float
 
 
 class Bar(BaseModel):

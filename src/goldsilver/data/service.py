@@ -149,6 +149,7 @@ class MetalsService:
             change_percent=pct,
             day_high=high,
             day_low=low,
+            prev_close=baseline,
         )
 
     def start(self) -> None:
@@ -209,7 +210,6 @@ class MetalsService:
         await self._emit_tick(self._make_tick(SILVER, silver_price, time))
 
     async def _run(self) -> None:
-        backoff = 1.0
         await self._emit_status("connecting")
 
         async with httpx.AsyncClient(timeout=5.0) as avanza_client:
@@ -231,15 +231,13 @@ class MetalsService:
                         await self._emit_status("reconnecting")
                         try:
                             await asyncio.wait_for(
-                                self._stop.wait(), timeout=backoff
+                                self._stop.wait(), timeout=self._poll_interval_s
                             )
                             return
                         except asyncio.TimeoutError:
                             pass
-                        backoff = min(backoff * 2, 30.0)
                         continue
 
-                    backoff = 1.0
                     await self._handle_payload(payload)
 
                     try:
