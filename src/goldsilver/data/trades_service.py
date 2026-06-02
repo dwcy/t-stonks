@@ -15,6 +15,7 @@ from goldsilver.data.settings import SimulatorSettings, trades_path
 from goldsilver.data.trade_models import (
     ConsensusAction,
     DailyPnL,
+    DayHistory,
     Position,
     PositionSnapshot,
     SimulatorState,
@@ -139,12 +140,35 @@ class TradesService:
             today_pct=today_pct,
             lifetime_pct=lifetime_pct,
             positions=tuple(positions_snap),
-            recent_trades=tuple(reversed(self._trades[-50:])),
+            recent_trades=tuple(self._trades[-50:]),
+            history=self._build_history(),
             sell_mode=self._settings.sell_mode,
             sell_pct=self._settings.sell_pct,
             trigger_mode=self._settings.trigger_mode,
             liquidated_for_day=self._state.liquidated_for_day,
         )
+
+    def _build_history(self) -> tuple[DayHistory, ...]:
+        buys: dict[date, int] = {}
+        sells: dict[date, int] = {}
+        for t in self._trades:
+            day = to_local(t.ts_utc).date()
+            if t.side == "BUY":
+                buys[day] = buys.get(day, 0) + 1
+            else:
+                sells[day] = sells.get(day, 0) + 1
+        pnl_by_day: dict[date, float] = {d.day: d.realized_pnl for d in self._daily}
+        days = set(buys) | set(sells) | set(pnl_by_day)
+        rows = [
+            DayHistory(
+                day=d,
+                buys=buys.get(d, 0),
+                sells=sells.get(d, 0),
+                realized_pnl=pnl_by_day.get(d, 0.0),
+            )
+            for d in sorted(days)
+        ]
+        return tuple(rows)
 
     async def update_settings(self, **changes: Any) -> None:
         async with self._lock:
@@ -276,6 +300,7 @@ class TradesService:
             cash_delta=-cost,
             realized_pnl=0.0,
             reason="signal_buy",
+            position_units=new_units,
             rule_snapshot=rule_snap,
             signals=sig_snap,
         )
@@ -342,6 +367,7 @@ class TradesService:
             cash_delta=proceeds,
             realized_pnl=realized,
             reason=reason,
+            position_units=pos.units,
             rule_snapshot=rule_snap,
             signals=signals,
         )
@@ -470,6 +496,7 @@ def _trade_to_dict(t: Trade) -> dict[str, Any]:
         "cash_delta": t.cash_delta,
         "realized_pnl": t.realized_pnl,
         "reason": t.reason,
+        "position_units": t.position_units,
         "rule_snapshot": t.rule_snapshot,
         "signals": t.signals,
     }
@@ -496,6 +523,7 @@ def _trade_from_dict(d: dict[str, Any]) -> Trade:
         if d.get("reason")
         in ("signal_buy", "signal_sell", "eod_liquidation", "manual_reset")
         else "signal_buy",
+        position_units=float(d.get("position_units", 0.0)),
         rule_snapshot=d.get("rule_snapshot")
         if isinstance(d.get("rule_snapshot"), dict)
         else {},
