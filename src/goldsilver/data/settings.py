@@ -44,12 +44,59 @@ DEFAULT_SILVER = "Pearl"
 METALS_COLUMNS_CHOICES: tuple[int, ...] = (1, 2, 3, 4)
 
 ALLOWED_MINI_TILES: tuple[str, ...] = (
-    "USDSEK", "CADSEK", "EURSEK", "BTC", "BRENT", "COPPER",
+    "USDSEK",
+    "CADSEK",
+    "EURSEK",
+    "BTC",
+    "BRENT",
+    "COPPER",
 )
 
 
 def _default_mini_tiles() -> list[str]:
     return ["USDSEK", "CADSEK", "EURSEK", "BTC", "BRENT", "COPPER"]
+
+
+SellMode = Literal["all", "percent"]
+TriggerMode = Literal["both", "either"]
+
+DEFAULT_INITIAL_DEPOSIT = 100_000.0
+
+
+@dataclass(slots=True)
+class SimulatorSettings:
+    enabled: bool = False
+    initial_deposit: float = DEFAULT_INITIAL_DEPOSIT
+    buy_pct: float = 0.10
+    sell_mode: SellMode = "all"
+    sell_pct: float = 0.50
+    trigger_mode: TriggerMode = "either"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.enabled, bool):
+            self.enabled = bool(self.enabled)
+        try:
+            self.initial_deposit = float(self.initial_deposit)
+        except (TypeError, ValueError):
+            self.initial_deposit = DEFAULT_INITIAL_DEPOSIT
+        if self.initial_deposit <= 0.0:
+            self.initial_deposit = DEFAULT_INITIAL_DEPOSIT
+        try:
+            self.buy_pct = float(self.buy_pct)
+        except (TypeError, ValueError):
+            self.buy_pct = 0.10
+        if not (0.0 < self.buy_pct <= 1.0):
+            self.buy_pct = 0.10
+        if self.sell_mode not in ("all", "percent"):
+            self.sell_mode = "all"
+        try:
+            self.sell_pct = float(self.sell_pct)
+        except (TypeError, ValueError):
+            self.sell_pct = 0.50
+        if not (0.0 < self.sell_pct <= 1.0):
+            self.sell_pct = 0.50
+        if self.trigger_mode not in ("both", "either"):
+            self.trigger_mode = "either"
 
 
 def _default_visible_signals() -> dict[str, bool]:
@@ -85,14 +132,13 @@ class AppSettings:
     metals_columns: int = 2
     stock_tickers: list[str] = field(default_factory=_default_stock_tickers)
     mini_tiles: list[str] = field(default_factory=_default_mini_tiles)
-    visible_signals: dict[str, bool] = field(
-        default_factory=_default_visible_signals
-    )
+    visible_signals: dict[str, bool] = field(default_factory=_default_visible_signals)
     signal_params: dict[str, dict[str, float]] = field(
         default_factory=_default_signal_params
     )
     marker_momentum_strategy: str = ""
     marker_recoil_strategy: str = ""
+    simulator: SimulatorSettings = field(default_factory=SimulatorSettings)
 
     def __post_init__(self) -> None:
         if self.metals_columns not in METALS_COLUMNS_CHOICES:
@@ -148,11 +194,21 @@ class AppSettings:
             if name not in STRATEGY_NAMES or not isinstance(kv, dict):
                 continue
             clean_params[name] = {
-                str(k): float(v)
-                for k, v in kv.items()
-                if isinstance(v, (int, float))
+                str(k): float(v) for k, v in kv.items() if isinstance(v, (int, float))
             }
         self.signal_params = clean_params
+        if not isinstance(self.simulator, SimulatorSettings):
+            if isinstance(self.simulator, dict):
+                allowed_sim = {f.name for f in fields(SimulatorSettings)}
+                clean_sim = {
+                    k: v for k, v in self.simulator.items() if k in allowed_sim
+                }
+                try:
+                    self.simulator = SimulatorSettings(**clean_sim)
+                except TypeError:
+                    self.simulator = SimulatorSettings()
+            else:
+                self.simulator = SimulatorSettings()
 
     @classmethod
     def load(cls) -> "AppSettings":
@@ -175,9 +231,7 @@ class AppSettings:
     def save(self) -> None:
         path = settings_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(asdict(self), indent=2), encoding="utf-8"
-        )
+        path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
 
     def gold_rgb(self) -> tuple[int, int, int]:
         return GOLD_PRESETS.get(self.gold_color_name, GOLD_PRESETS[DEFAULT_GOLD])
@@ -188,15 +242,15 @@ class AppSettings:
         )
 
 
-def settings_path() -> Path:
+def _config_base() -> Path:
     if os.name == "nt":
-        base = Path(
-            os.environ.get("APPDATA")
-            or Path.home() / "AppData" / "Roaming"
-        )
-    else:
-        base = Path(
-            os.environ.get("XDG_CONFIG_HOME")
-            or Path.home() / ".config"
-        )
-    return base / "goldsilver" / "settings.json"
+        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+
+
+def settings_path() -> Path:
+    return _config_base() / "goldsilver" / "settings.json"
+
+
+def trades_path() -> Path:
+    return _config_base() / "goldsilver" / "trades.json"

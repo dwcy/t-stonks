@@ -349,6 +349,93 @@ PlotSettingsScreen .mini-tile-row .mini-reorder {
     width: 100%;
 }
 
+TradeSimulatorScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+#trade-sim-dialog {
+    width: 100;
+    height: 36;
+    padding: 1 2;
+    background: #14141c;
+    border: round #7dff8c;
+}
+
+#trade-sim-title {
+    dock: top;
+    width: 100%;
+    height: 1;
+    content-align: center middle;
+    color: #7dff8c;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#trade-sim-body {
+    height: 1fr;
+    width: 100%;
+}
+
+TradeSimulatorScreen .sim-row {
+    height: auto;
+    align: left middle;
+    margin-bottom: 1;
+}
+
+TradeSimulatorScreen .sim-stat {
+    width: 1fr;
+    height: 1;
+    content-align: left middle;
+}
+
+TradeSimulatorScreen .sim-pos {
+    width: 1fr;
+    height: 1;
+    content-align: left middle;
+}
+
+TradeSimulatorScreen .sim-controls {
+    height: auto;
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+TradeSimulatorScreen .sim-label {
+    height: 3;
+    content-align: left middle;
+    color: #e0e0e8;
+    margin-left: 1;
+}
+
+TradeSimulatorScreen .sim-label-fixed {
+    height: 3;
+    width: 12;
+    content-align: left middle;
+    color: #a0a0b0;
+}
+
+TradeSimulatorScreen .sim-pct-input {
+    width: 12;
+    height: 3;
+}
+
+TradeSimulatorScreen #sim-trades {
+    height: 12;
+    width: 100%;
+}
+
+#trade-sim-footer {
+    dock: bottom;
+    height: 3;
+    width: 100%;
+    align: center middle;
+}
+
+#trade-sim-footer Button {
+    margin: 0 1;
+}
+
 DisconnectScreen {
     align: center middle;
     background: rgba(0, 0, 0, 0.6);

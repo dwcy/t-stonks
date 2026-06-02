@@ -13,6 +13,7 @@ from goldsilver.widgets.plot_settings import PlotSettings, PlotSettingsScreen
 from goldsilver.widgets.stock_row import StockRow
 from goldsilver.widgets.stock_tile import StockTile
 from goldsilver.widgets.stocktwits_panel import StockTwitsPanel
+from goldsilver.widgets.trade_simulator import TradeSimulatorScreen
 
 
 __all__ = [
@@ -32,5 +33,6 @@ __all__ = [
     "StockRow",
     "StockTile",
     "StockTwitsPanel",
+    "TradeSimulatorScreen",
     "build_edit_data",
 ]
