@@ -290,6 +290,65 @@ async def test_reset_budget(isolated_trades_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_replay_is_idempotent_via_dedupe(isolated_trades_path: Path) -> None:
+    svc = TradesService(SimulatorSettings(enabled=True, trigger_mode="either"))
+    lp = {"GOLD": (2000.0, _ts(10))}
+    await svc.on_signal(
+        symbol="GOLD",
+        price=2000.0,
+        ts_utc=_ts(10),
+        mom=_sig("BUY", _ts(10)),
+        rec=_sig("NONE", _ts(10), kind="recoil", strategy="r"),
+        last_prices=lp,
+    )
+    cash_after_first = svc._state.cash
+    assert len(svc._trades) == 1
+    await svc.on_signal(
+        symbol="GOLD",
+        price=2000.0,
+        ts_utc=_ts(10),
+        mom=_sig("BUY", _ts(10)),
+        rec=_sig("NONE", _ts(10), kind="recoil", strategy="r"),
+        last_prices=lp,
+    )
+    assert len(svc._trades) == 1
+    assert svc._state.cash == cash_after_first
+    earlier = _ts(10) - timedelta(seconds=30)
+    await svc.on_signal(
+        symbol="GOLD",
+        price=2000.0,
+        ts_utc=earlier,
+        mom=_sig("SELL", earlier),
+        rec=_sig("NONE", earlier, kind="recoil", strategy="r"),
+        last_prices=lp,
+    )
+    assert len(svc._trades) == 1
+
+
+@pytest.mark.asyncio
+async def test_enable_toggle_fires_on_enable_changed(
+    isolated_trades_path: Path,
+) -> None:
+    calls = []
+
+    async def on_enabled() -> None:
+        calls.append(True)
+
+    svc = TradesService(
+        SimulatorSettings(enabled=False, trigger_mode="either"),
+        on_enable_changed=on_enabled,
+    )
+    await svc.update_settings(enabled=True)
+    assert calls == [True]
+    await svc.update_settings(enabled=True)
+    assert calls == [True]
+    await svc.update_settings(enabled=False)
+    assert calls == [True]
+    await svc.update_settings(enabled=True)
+    assert calls == [True, True]
+
+
+@pytest.mark.asyncio
 async def test_summary_includes_unrealized(isolated_trades_path: Path) -> None:
     svc = TradesService(SimulatorSettings(enabled=True, trigger_mode="either"))
     lp = {"GOLD": (2000.0, _ts(10))}

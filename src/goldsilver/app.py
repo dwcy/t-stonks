@@ -47,7 +47,8 @@ from goldsilver.data.signal_strategies import (
     build_strategies,
 )
 from goldsilver.data.service import POLL_INTERVAL_S
-from goldsilver.data.session import stockholm_midnight_utc
+from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
+from goldsilver.data.trading_hours import to_local as _to_stockholm
 from goldsilver.data.trades_service import TradesService
 from goldsilver.widgets import (
     CalendarPanel,
@@ -193,6 +194,7 @@ class GoldSilverApp(App[None]):
         self._trades = TradesService(
             self._settings.simulator,
             settings_persister=self._persist_settings,
+            on_enable_changed=self._on_simulator_enabled,
         )
 
     @property
@@ -297,6 +299,8 @@ class GoldSilverApp(App[None]):
         self._insider_service.start()
         self._stocktwits_service.start()
         self._seed_all()
+        if self._settings.simulator.enabled:
+            self._start_simulator_replay()
 
     async def on_unmount(self) -> None:
         await self._service.stop()
@@ -695,6 +699,49 @@ class GoldSilverApp(App[None]):
 
     async def action_trade_simulator(self) -> None:
         self.push_screen(TradeSimulatorScreen())
+
+    async def _on_simulator_enabled(self) -> None:
+        self._start_simulator_replay()
+
+    def _start_simulator_replay(self) -> None:
+        for symbol in (GOLD, SILVER):
+            self.run_worker(
+                self._replay_today_for_simulator(symbol),
+                exclusive=False,
+                group=f"sim-replay-{symbol}",
+            )
+
+    async def _replay_today_for_simulator(self, symbol: str) -> None:
+        if not self._settings.simulator.enabled:
+            return
+        mom_name = self._settings.marker_momentum_strategy
+        rec_name = self._settings.marker_recoil_strategy
+        mom_cls = next((c for c in STRATEGY_REGISTRY if c.name == mom_name), None)
+        rec_cls = next((c for c in STRATEGY_REGISTRY if c.name == rec_name), None)
+        if mom_cls is None or rec_cls is None:
+            return
+        try:
+            bars = await self._service.fetch_history(symbol, period="2d", interval="1m")
+        except Exception:
+            return
+        if not bars:
+            return
+        today_local = stockholm_now().date()
+        mom = mom_cls()
+        rec = rec_cls()
+        for bar in bars:
+            m = mom.observe(symbol, bar.close, bar.time)
+            r = rec.observe(symbol, bar.close, bar.time)
+            if _to_stockholm(bar.time).date() != today_local:
+                continue
+            await self._trades.on_signal(
+                symbol=symbol,
+                price=bar.close,
+                ts_utc=bar.time,
+                mom=m,
+                rec=r,
+                last_prices={symbol: (bar.close, bar.time)},
+            )
 
     def _on_param_edit(self, strategy_name: str, key: str, value: float) -> None:
         strategy = self._strategy_by_name.get(strategy_name)

@@ -62,6 +62,7 @@ class SimulatorState:
     today_realized_pnl: float = 0.0
     last_consensus_action: dict[str, ConsensusAction] = field(default_factory=dict)
     liquidated_for_day: bool = False
+    last_processed_ts: dict[str, datetime] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

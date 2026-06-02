@@ -25,6 +25,7 @@ from goldsilver.data.trade_models import (
 from goldsilver.data.trading_hours import is_open, to_local
 
 SettingsPersister = Callable[[], Awaitable[None] | None]
+EnableChangedCallback = Callable[[], Awaitable[None] | None]
 
 _MIN_BUY_USD = 1.0
 _TRADE_CAP = 5000
@@ -36,9 +37,11 @@ class TradesService:
         settings: SimulatorSettings,
         *,
         settings_persister: SettingsPersister | None = None,
+        on_enable_changed: EnableChangedCallback | None = None,
     ) -> None:
         self._settings = settings
         self._settings_persister = settings_persister
+        self._on_enable_changed = on_enable_changed
         self._state = SimulatorState(cash=settings.initial_deposit)
         self._trades: list[Trade] = []
         self._daily: list[DailyPnL] = []
@@ -56,6 +59,9 @@ class TradesService:
         last_prices: dict[str, tuple[float, datetime]],
     ) -> None:
         async with self._lock:
+            seen = self._state.last_processed_ts.get(symbol)
+            if seen is not None and ts_utc <= seen:
+                return
             now_local = to_local(ts_utc)
             self._check_clock(now_local, last_prices)
             consensus = self._consensus_action(mom, rec)
@@ -80,6 +86,7 @@ class TradesService:
                     )
                 if trade is not None:
                     self._trades.append(trade)
+            self._state.last_processed_ts[symbol] = ts_utc
             await asyncio.to_thread(self._persist)
 
     async def liquidate_now(
@@ -145,14 +152,20 @@ class TradesService:
                 "trigger_mode" in changes
                 and changes["trigger_mode"] != self._settings.trigger_mode
             )
+            was_enabled = self._settings.enabled
             for k, v in changes.items():
                 if hasattr(self._settings, k):
                     setattr(self._settings, k, v)
             self._settings.__post_init__()
             if trigger_changed:
                 self._state.last_consensus_action.clear()
+            now_enabled = self._settings.enabled
         if self._settings_persister is not None:
             result = self._settings_persister()
+            if asyncio.iscoroutine(result):
+                await result
+        if now_enabled and not was_enabled and self._on_enable_changed is not None:
+            result = self._on_enable_changed()
             if asyncio.iscoroutine(result):
                 await result
 
@@ -390,6 +403,9 @@ def _state_to_dict(s: SimulatorState) -> dict[str, Any]:
         "today_realized_pnl": s.today_realized_pnl,
         "last_consensus_action": dict(s.last_consensus_action),
         "liquidated_for_day": s.liquidated_for_day,
+        "last_processed_ts": {
+            sym: ts.isoformat() for sym, ts in s.last_processed_ts.items()
+        },
     }
 
 
@@ -418,6 +434,19 @@ def _state_from_dict(d: dict[str, Any], default_cash: float) -> SimulatorState:
         for k, v in last_action_raw.items():
             if v in ("BUY", "SELL", "NONE"):
                 last_action[str(k)] = v
+    last_ts_raw = d.get("last_processed_ts", {})
+    last_ts: dict[str, datetime] = {}
+    if isinstance(last_ts_raw, dict):
+        for k, v in last_ts_raw.items():
+            if not isinstance(v, str):
+                continue
+            try:
+                parsed = datetime.fromisoformat(v)
+            except ValueError:
+                continue
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            last_ts[str(k)] = parsed
     return SimulatorState(
         cash=float(d.get("cash", default_cash)),
         positions=positions,
@@ -426,6 +455,7 @@ def _state_from_dict(d: dict[str, Any], default_cash: float) -> SimulatorState:
         today_realized_pnl=float(d.get("today_realized_pnl", 0.0)),
         last_consensus_action=last_action,
         liquidated_for_day=bool(d.get("liquidated_for_day", False)),
+        last_processed_ts=last_ts,
     )
 
 
