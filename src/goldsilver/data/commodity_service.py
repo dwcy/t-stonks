@@ -14,7 +14,11 @@ CommodityHandler = Callable[[CommodityQuote], Awaitable[None] | None]
 CommodityStaleHandler = Callable[[CommoditySymbol, datetime], Awaitable[None] | None]
 
 COMMODITY_REFRESH_INTERVAL_S = 60.0
-_YF_SYMBOL: dict[CommoditySymbol, str] = {"BRENT": "BZ=F"}
+_YF_SYMBOL: dict[CommoditySymbol, str] = {
+    "BRENT": "BZ=F",
+    "COPPER": "HG=F",
+    "BTC": "BTC-USD",
+}
 
 
 class CommodityService:

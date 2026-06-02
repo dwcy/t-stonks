@@ -10,8 +10,8 @@ CalendarSource = Literal["FED", "ECB", "RIKSBANK"]
 EventImportance = Literal["HIGH", "MED", "LOW"]
 EventStatus = Literal["SCHEDULED", "RELEASED", "CANCELLED", "PASSED"]
 SnapshotStatus = Literal["ok", "stale", "unavailable"]
-FxPair = Literal["USDSEK", "CADSEK"]
-CommoditySymbol = Literal["BRENT"]
+FxPair = Literal["USDSEK", "CADSEK", "EURSEK"]
+CommoditySymbol = Literal["BRENT", "COPPER", "BTC"]
 
 
 class CalendarEvent(BaseModel):

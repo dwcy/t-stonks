@@ -17,6 +17,7 @@ FX_REFRESH_INTERVAL_S = 60.0
 _YF_SYMBOL: dict[FxPair, str] = {
     "USDSEK": "SEK=X",
     "CADSEK": "CADSEK=X",
+    "EURSEK": "EURSEK=X",
 }
 
 

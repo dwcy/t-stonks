@@ -12,6 +12,7 @@ from goldsilver.data.models_macro import FxPair, FxRate
 _PAIR_LABEL: dict[FxPair, str] = {
     "USDSEK": "USD/SEK",
     "CADSEK": "CAD/SEK",
+    "EURSEK": "EUR/SEK",
 }
 
 

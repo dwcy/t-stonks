@@ -11,9 +11,13 @@ from goldsilver.data.models_macro import CommodityQuote, CommoditySymbol
 
 _LABEL: dict[CommoditySymbol, str] = {
     "BRENT": "Brent Oil",
+    "COPPER": "Copper",
+    "BTC": "Bitcoin",
 }
 _CURRENCY: dict[CommoditySymbol, str] = {
     "BRENT": "USD",
+    "COPPER": "USD",
+    "BTC": "USD",
 }
 
 
