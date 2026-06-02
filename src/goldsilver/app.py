@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 from rich.text import Text
 from textual.app import App, ComposeResult
@@ -68,6 +69,9 @@ from goldsilver.widgets.chart import ChartKind
 
 
 TRUMP_SOURCE = "TRUMP"
+
+_FX_PAIR_IDS: frozenset[str] = frozenset({"USDSEK", "CADSEK", "EURSEK"})
+_COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC"})
 
 TIMEFRAMES: list[tuple[str, str, str, str | None]] = [
     ("today", "2d", "1m", "today"),
@@ -203,16 +207,19 @@ class GoldSilverApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with VerticalScroll(id="main-scroll"):
-            with Horizontal(id="macro-strip"):
-                usd = FxTile("USDSEK")
-                cad = FxTile("CADSEK")
-                brent = CommodityTile("BRENT")
-                self._fx_tiles["USDSEK"] = usd
-                self._fx_tiles["CADSEK"] = cad
-                self._commodity_tiles["BRENT"] = brent
-                yield usd
-                yield cad
-                yield brent
+            if self._settings.mini_tiles:
+                with Horizontal(id="macro-strip"):
+                    for tile_id in self._settings.mini_tiles:
+                        if tile_id in _FX_PAIR_IDS:
+                            pair = cast(FxPair, tile_id)
+                            fx_tile = FxTile(pair)
+                            self._fx_tiles[pair] = fx_tile
+                            yield fx_tile
+                        elif tile_id in _COMMODITY_IDS:
+                            symbol = cast(CommoditySymbol, tile_id)
+                            cm_tile = CommodityTile(symbol)
+                            self._commodity_tiles[symbol] = cm_tile
+                            yield cm_tile
             omx = OmxStrip()
             self._omx_strip = omx
             yield omx
@@ -359,9 +366,7 @@ class GoldSilverApp(App[None]):
 
     async def _seed_stats(self, symbol: str, panel: MetalPanel) -> None:
         try:
-            bars = await self._service.fetch_history(
-                symbol, period="1y", interval="1d"
-            )
+            bars = await self._service.fetch_history(symbol, period="1y", interval="1d")
         except Exception:
             return
         if len(bars) < 5:
@@ -415,21 +420,21 @@ class GoldSilverApp(App[None]):
         if not actions:
             return
         both_buy = (
-            mom is not None and rec is not None
-            and mom.action == "BUY" and rec.action == "BUY"
+            mom is not None
+            and rec is not None
+            and mom.action == "BUY"
+            and rec.action == "BUY"
         )
         both_sell = (
-            mom is not None and rec is not None
-            and mom.action == "SELL" and rec.action == "SELL"
+            mom is not None
+            and rec is not None
+            and mom.action == "SELL"
+            and rec.action == "SELL"
         )
         if "BUY" in actions:
-            panel.add_marker(
-                tick.price, tick.time, (125, 255, 140), heavy=both_buy
-            )
+            panel.add_marker(tick.price, tick.time, (125, 255, 140), heavy=both_buy)
         if "SELL" in actions:
-            panel.add_marker(
-                tick.price, tick.time, (255, 107, 107), heavy=both_sell
-            )
+            panel.add_marker(tick.price, tick.time, (255, 107, 107), heavy=both_sell)
 
     async def _on_status(self, status: str) -> None:
         self._connection_status = status
@@ -656,9 +661,7 @@ class GoldSilverApp(App[None]):
 
     def _on_param_reset(self, strategy_name: str) -> None:
         try:
-            cls = next(
-                c for c in STRATEGY_REGISTRY if c.name == strategy_name
-            )
+            cls = next(c for c in STRATEGY_REGISTRY if c.name == strategy_name)
         except StopIteration:
             return
         fresh = cls()
@@ -772,23 +775,15 @@ class GoldSilverApp(App[None]):
         insider_changed = (
             settings.show_insider_trades != self._settings.show_insider_trades
         )
-        stocktwits_changed = (
-            settings.show_stocktwits != self._settings.show_stocktwits
-        )
+        stocktwits_changed = settings.show_stocktwits != self._settings.show_stocktwits
         gold_changed = settings.gold_color_name != self._settings.gold_color_name
-        silver_changed = (
-            settings.silver_color_name != self._settings.silver_color_name
-        )
-        columns_changed = (
-            settings.metals_columns != self._settings.metals_columns
-        )
+        silver_changed = settings.silver_color_name != self._settings.silver_color_name
+        columns_changed = settings.metals_columns != self._settings.metals_columns
 
         visible_changed = settings.visible_signals != self._settings.visible_signals
         markers_changed = (
-            settings.marker_momentum_strategy
-            != self._settings.marker_momentum_strategy
-            or settings.marker_recoil_strategy
-            != self._settings.marker_recoil_strategy
+            settings.marker_momentum_strategy != self._settings.marker_momentum_strategy
+            or settings.marker_recoil_strategy != self._settings.marker_recoil_strategy
         )
 
         self._timeframe_index = settings.timeframe_index
@@ -859,7 +854,8 @@ class GoldSilverApp(App[None]):
 
     def _sync_visible_signals(self) -> None:
         names = [
-            n for n in (s.name for s in self._strategies)
+            n
+            for n in (s.name for s in self._strategies)
             if self._settings.visible_signals.get(n, False)
         ]
         for panel in self._panels.values():
