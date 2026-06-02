@@ -48,6 +48,7 @@ from goldsilver.data.signal_strategies import (
 )
 from goldsilver.data.service import POLL_INTERVAL_S
 from goldsilver.data.session import stockholm_midnight_utc
+from goldsilver.data.trades_service import TradesService
 from goldsilver.widgets import (
     CalendarPanel,
     CommodityTile,
@@ -63,6 +64,7 @@ from goldsilver.widgets import (
     PlotSettingsScreen,
     StockRow,
     StockTwitsPanel,
+    TradeSimulatorScreen,
     build_edit_data,
 )
 from goldsilver.widgets.chart import ChartKind
@@ -99,6 +101,7 @@ class GoldSilverApp(App[None]):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("p", "plot_settings", "Plot Settings"),
+        Binding("t", "trade_simulator", "Trade Sim"),
         Binding("r", "refresh", "Refresh"),
         Binding("z", "cycle_zoom", "Zoom"),
         Binding("h", "cycle_chart_mode", "Mode"),
@@ -187,6 +190,10 @@ class GoldSilverApp(App[None]):
         self._trump_news: list[NewsItem] = []
         self._disconnect_screen: DisconnectScreen | None = None
         self._disconnect_dismissed = False
+        self._trades = TradesService(
+            self._settings.simulator,
+            settings_persister=self._persist_settings,
+        )
 
     @property
     def _timeframe_label(self) -> str:
@@ -395,6 +402,8 @@ class GoldSilverApp(App[None]):
         self._last_tick_at = tick.time
         self._last_price[tick.symbol] = (tick.price, tick.time)
         panel = self._panels.get(tick.symbol)
+        mom: Signal | None = None
+        rec: Signal | None = None
         if panel is not None:
             panel.apply_tick(tick)
             signals: dict[str, Signal] = {}
@@ -405,6 +414,15 @@ class GoldSilverApp(App[None]):
             mom = signals.get(self._settings.marker_momentum_strategy)
             rec = signals.get(self._settings.marker_recoil_strategy)
             self._maybe_draw_marker(panel, tick, mom, rec)
+        if self._settings.simulator.enabled:
+            await self._trades.on_signal(
+                symbol=tick.symbol,
+                price=tick.price,
+                ts_utc=tick.time,
+                mom=mom,
+                rec=rec,
+                last_prices=self._last_price,
+            )
         self._refresh_status_bar()
 
     def _maybe_draw_marker(
@@ -674,6 +692,9 @@ class GoldSilverApp(App[None]):
                 on_reset=self._on_param_reset,
             )
         )
+
+    async def action_trade_simulator(self) -> None:
+        self.push_screen(TradeSimulatorScreen())
 
     def _on_param_edit(self, strategy_name: str, key: str, value: float) -> None:
         strategy = self._strategy_by_name.get(strategy_name)
