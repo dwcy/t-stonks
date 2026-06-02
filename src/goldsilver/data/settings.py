@@ -54,7 +54,7 @@ ALLOWED_MINI_TILES: tuple[str, ...] = (
 
 
 def _default_mini_tiles() -> list[str]:
-    return ["USDSEK", "CADSEK", "EURSEK", "BTC", "BRENT", "COPPER"]
+    return ["USDSEK", "CADSEK", "EURSEK", "COPPER", "BTC", "BRENT"]
 
 
 SellMode = Literal["all", "percent"]
@@ -124,9 +124,10 @@ class AppSettings:
     signal_mode: SignalMode = "MOMENTUM"
     show_news_markets: bool = True
     show_news_trump: bool = True
-    show_congress_trades: bool = True
-    show_insider_trades: bool = True
-    show_stocktwits: bool = True
+    show_congress_trades: bool = False
+    show_insider_trades: bool = False
+    show_stocktwits: bool = False
+    show_stock_row: bool = True
     gold_color_name: str = DEFAULT_GOLD
     silver_color_name: str = DEFAULT_SILVER
     metals_columns: int = 2

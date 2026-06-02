@@ -21,7 +21,8 @@ Footer {
 
 #metals {
     height: auto;
-    padding: 1 2 0 2;
+    padding: 1 0 0 0;
+    grid-gutter: 0 2;
 }
 
 #metals.cards-1 {
@@ -45,7 +46,6 @@ MetalPanel {
     height: auto;
     border: round #2a2a3a;
     padding: 0 2 0 2;
-    margin: 0 1;
     background: #10101a;
 }
 
@@ -100,13 +100,20 @@ MetalPanel .signal-row {
     layout: horizontal;
     height: 1;
     padding: 0 2;
-    background: #14141c;
 }
 
 .fx-tile, .commodity-tile {
     width: 1fr;
     height: 1;
     content-align: left middle;
+    text-overflow: ellipsis;
+}
+
+.mini-sep {
+    width: 3;
+    height: 1;
+    content-align: center middle;
+    color: #5a5a6a;
 }
 
 CalendarPanel {
@@ -120,7 +127,6 @@ CalendarPanel {
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
     padding: 0 1;
-    margin: 0 2 0 2;
     background: #10101a;
 }
 
@@ -160,12 +166,10 @@ OmxStrip {
     padding: 0 2;
     background: #14141c;
     content-align: left middle;
-    margin: 0 2;
 }
 
 StockRow {
     height: 7;
-    margin: 0 2;
     padding: 0;
     grid-rows: 7;
     grid-gutter: 0 1;
@@ -183,12 +187,12 @@ StockTile {
     height: 7;
     border: round #2a2a3a;
     padding: 0 1;
-    background: #10101a;
 }
 
 StockTile > #stock-head {
     height: 1;
     color: #e0e0e8;
+    text-overflow: ellipsis;
 }
 
 NewsPanel {
@@ -200,7 +204,6 @@ NewsPanel {
     border-title-align: left;
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
-    margin: 0 2;
     padding: 0 1;
     background: #10101a;
 }
@@ -214,7 +217,6 @@ CongressPanel {
     border-title-align: left;
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
-    margin: 0 2;
     padding: 0 1;
     background: #10101a;
 }
@@ -228,7 +230,6 @@ InsiderPanel {
     border-title-align: left;
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
-    margin: 0 2;
     padding: 0 1;
     background: #10101a;
 }
@@ -242,7 +243,6 @@ StockTwitsPanel {
     border-title-align: left;
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
-    margin: 0 2;
     padding: 0 1;
     background: #10101a;
 }

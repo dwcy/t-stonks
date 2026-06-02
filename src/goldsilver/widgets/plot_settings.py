@@ -6,15 +6,11 @@ from typing import Callable
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label, RadioButton, RadioSet, Switch
+from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Switch
 
 from goldsilver.data.settings import (
     ALLOWED_MINI_TILES,
-    DEFAULT_GOLD,
-    DEFAULT_SILVER,
-    GOLD_PRESETS,
     METALS_COLUMNS_CHOICES,
-    SILVER_PRESETS,
 )
 from goldsilver.data.signal_strategies import STRATEGY_REGISTRY
 from goldsilver.widgets.chart import ChartKind
@@ -26,9 +22,9 @@ _MINI_TILE_LABEL: dict[str, str] = {
     "USDSEK": "USD/SEK",
     "CADSEK": "CAD/SEK",
     "EURSEK": "EUR/SEK",
-    "BRENT": "Brent Oil",
+    "BRENT": "Oil",
     "COPPER": "Copper",
-    "BTC": "Bitcoin",
+    "BTC": "BTC",
 }
 
 
@@ -44,6 +40,7 @@ class PlotSettings:
     show_congress_trades: bool
     show_insider_trades: bool
     show_stocktwits: bool
+    show_stock_row: bool
     gold_color_name: str
     silver_color_name: str
     metals_columns: int
@@ -51,6 +48,7 @@ class PlotSettings:
     marker_momentum_strategy: str = ""
     marker_recoil_strategy: str = ""
     mini_tiles: list[str] = field(default_factory=list)
+    stock_tickers: list[str] = field(default_factory=list)
 
 
 class PlotSettingsScreen(ModalScreen[None]):
@@ -67,8 +65,6 @@ class PlotSettingsScreen(ModalScreen[None]):
         self._state = current
         self._on_change = on_change
         self._on_open_math = on_open_math
-        self._gold_names = list(GOLD_PRESETS.keys())
-        self._silver_names = list(SILVER_PRESETS.keys())
         self._strategy_names = [cls.name for cls in STRATEGY_REGISTRY]
         self._momentum_names = [
             cls.name for cls in STRATEGY_REGISTRY if cls.kind == "momentum"
@@ -196,21 +192,19 @@ class PlotSettingsScreen(ModalScreen[None]):
                         for row in self._build_mini_rows():
                             yield row
                 with Vertical(classes="setting-group"):
-                    yield Label("Gold color", classes="setting-label")
-                    with RadioSet(id="setting-gold-color"):
-                        for name in self._gold_names:
-                            yield RadioButton(
-                                name,
-                                value=(name == self._state.gold_color_name),
-                            )
-                with Vertical(classes="setting-group"):
-                    yield Label("Silver color", classes="setting-label")
-                    with RadioSet(id="setting-silver-color"):
-                        for name in self._silver_names:
-                            yield RadioButton(
-                                name,
-                                value=(name == self._state.silver_color_name),
-                            )
+                    yield Label("Mini charts", classes="setting-label")
+                    with Horizontal(classes="switch-row"):
+                        yield Switch(
+                            value=self._state.show_stock_row,
+                            id="setting-stock-row",
+                        )
+                        yield Label("Show mini charts", classes="switch-label")
+                    yield Label("Tickers (comma-separated)", classes="sub-label")
+                    yield Input(
+                        value=", ".join(self._state.stock_tickers),
+                        placeholder="LUG.TO, LUG.ST, LUMI.ST",
+                        id="setting-stock-tickers",
+                    )
             yield Button("Close", variant="primary", id="setting-close")
 
     @staticmethod
@@ -319,16 +313,6 @@ class PlotSettingsScreen(ModalScreen[None]):
             if kind != self._state.chart_kind:
                 self._state.chart_kind = kind
                 self._emit()
-        elif rs_id == "setting-gold-color":
-            name = self._gold_names[idx]
-            if name != self._state.gold_color_name:
-                self._state.gold_color_name = name
-                self._emit()
-        elif rs_id == "setting-silver-color":
-            name = self._silver_names[idx]
-            if name != self._state.silver_color_name:
-                self._state.silver_color_name = name
-                self._emit()
         elif rs_id == "setting-marker-momentum":
             name = self._momentum_names[idx]
             if name != self._state.marker_momentum_strategy:
@@ -369,6 +353,9 @@ class PlotSettingsScreen(ModalScreen[None]):
         elif sw_id == "setting-stocktwits" and v != self._state.show_stocktwits:
             self._state.show_stocktwits = v
             self._emit()
+        elif sw_id == "setting-stock-row" and v != self._state.show_stock_row:
+            self._state.show_stock_row = v
+            self._emit()
         elif sw_id.startswith("setting-show-"):
             for name in self._strategy_names:
                 if self._signal_switch_id(name) == sw_id:
@@ -383,6 +370,26 @@ class PlotSettingsScreen(ModalScreen[None]):
                 if self._mini_slug(tile_id) == slug:
                     self._toggle_mini_tile(tile_id, bool(v))
                     break
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id != "setting-stock-tickers":
+            return
+        parsed = self._parse_tickers(event.value)
+        if parsed != self._state.stock_tickers:
+            self._state.stock_tickers = parsed
+            self._emit()
+
+    @staticmethod
+    def _parse_tickers(raw: str) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for chunk in raw.replace(";", ",").replace(" ", ",").split(","):
+            t = chunk.strip().upper()
+            if not t or t in seen:
+                continue
+            seen.add(t)
+            out.append(t)
+        return out
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id or ""

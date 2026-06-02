@@ -101,7 +101,7 @@ class GoldSilverApp(App[None]):
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
-        Binding("p", "plot_settings", "Plot Settings"),
+        Binding("p", "plot_settings", "Settings"),
         Binding("t", "trade_simulator", "Trade Sim"),
         Binding("r", "refresh", "Refresh"),
         Binding("z", "cycle_zoom", "Zoom"),
@@ -217,7 +217,9 @@ class GoldSilverApp(App[None]):
         yield Header(show_clock=True)
         with VerticalScroll(id="main-scroll"):
             with Horizontal(id="macro-strip"):
-                for tile_id in self._settings.mini_tiles:
+                for i, tile_id in enumerate(self._settings.mini_tiles):
+                    if i > 0:
+                        yield Static("|", classes="mini-sep")
                     if tile_id in _FX_PAIR_IDS:
                         pair = cast(FxPair, tile_id)
                         fx_tile = FxTile(pair)
@@ -231,10 +233,11 @@ class GoldSilverApp(App[None]):
             omx = OmxStrip()
             self._omx_strip = omx
             yield omx
-            if self._settings.stock_tickers:
-                stock_row = StockRow(list(self._settings.stock_tickers))
-                self._stock_row = stock_row
-                yield stock_row
+            stock_row = StockRow(list(self._settings.stock_tickers))
+            self._stock_row = stock_row
+            if not self._settings.show_stock_row or not self._settings.stock_tickers:
+                stock_row.display = False
+            yield stock_row
             with Grid(
                 id="metals",
                 classes=f"cards-{self._settings.metals_columns}",
@@ -556,8 +559,10 @@ class GoldSilverApp(App[None]):
         strip.remove_children()
         self._fx_tiles.clear()
         self._commodity_tiles.clear()
-        new_widgets: list[FxTile | CommodityTile] = []
-        for tile_id in self._settings.mini_tiles:
+        new_widgets: list[FxTile | CommodityTile | Static] = []
+        for i, tile_id in enumerate(self._settings.mini_tiles):
+            if i > 0:
+                new_widgets.append(Static("|", classes="mini-sep"))
             if tile_id in _FX_PAIR_IDS:
                 pair = cast(FxPair, tile_id)
                 ft = FxTile(pair)
@@ -671,6 +676,7 @@ class GoldSilverApp(App[None]):
             show_congress_trades=self._settings.show_congress_trades,
             show_insider_trades=self._settings.show_insider_trades,
             show_stocktwits=self._settings.show_stocktwits,
+            show_stock_row=self._settings.show_stock_row,
             gold_color_name=self._settings.gold_color_name,
             silver_color_name=self._settings.silver_color_name,
             metals_columns=self._settings.metals_columns,
@@ -678,6 +684,7 @@ class GoldSilverApp(App[None]):
             marker_momentum_strategy=self._settings.marker_momentum_strategy,
             marker_recoil_strategy=self._settings.marker_recoil_strategy,
             mini_tiles=list(self._settings.mini_tiles),
+            stock_tickers=list(self._settings.stock_tickers),
         )
         self.push_screen(
             PlotSettingsScreen(
@@ -883,6 +890,10 @@ class GoldSilverApp(App[None]):
             or settings.marker_recoil_strategy != self._settings.marker_recoil_strategy
         )
         mini_tiles_changed = settings.mini_tiles != self._settings.mini_tiles
+        stock_row_visible_changed = (
+            settings.show_stock_row != self._settings.show_stock_row
+        )
+        stock_tickers_changed = settings.stock_tickers != self._settings.stock_tickers
 
         self._timeframe_index = settings.timeframe_index
         self._chart_kind = settings.chart_kind
@@ -899,6 +910,7 @@ class GoldSilverApp(App[None]):
         self._settings.show_congress_trades = settings.show_congress_trades
         self._settings.show_insider_trades = settings.show_insider_trades
         self._settings.show_stocktwits = settings.show_stocktwits
+        self._settings.show_stock_row = settings.show_stock_row
         self._settings.gold_color_name = settings.gold_color_name
         self._settings.silver_color_name = settings.silver_color_name
         self._settings.metals_columns = settings.metals_columns
@@ -906,6 +918,7 @@ class GoldSilverApp(App[None]):
         self._settings.marker_momentum_strategy = settings.marker_momentum_strategy
         self._settings.marker_recoil_strategy = settings.marker_recoil_strategy
         self._settings.mini_tiles = list(settings.mini_tiles)
+        self._settings.stock_tickers = list(settings.stock_tickers)
         try:
             self._settings.save()
         except OSError:
@@ -929,6 +942,23 @@ class GoldSilverApp(App[None]):
             self._sync_visible_signals()
         if mini_tiles_changed:
             self._apply_mini_tiles()
+        if stock_tickers_changed:
+            self._stock_service.set_tickers(list(self._settings.stock_tickers))
+            self._stock_service.start()
+            if self._stock_row is not None:
+                self._stock_row.apply_tickers(list(self._settings.stock_tickers))
+            if self._settings.stock_tickers:
+                self.run_worker(
+                    self._stock_service.refresh_now(),
+                    exclusive=False,
+                    group="stock-refresh",
+                )
+        if (
+            stock_row_visible_changed or stock_tickers_changed
+        ) and self._stock_row is not None:
+            self._stock_row.display = bool(
+                self._settings.show_stock_row and self._settings.stock_tickers
+            )
 
         if timeframe_changed:
             self._refresh_status_bar()

@@ -42,3 +42,20 @@ class StockRow(Grid):
     def mark_stale(self, since: datetime) -> None:
         for tile in self._tiles.values():
             tile.mark_stale(since)
+
+    def apply_tickers(self, tickers: list[str]) -> None:
+        self._tickers = list(tickers)
+        self._tiles.clear()
+        self.remove_children()
+        self._apply_layout_classes()
+        new_tiles: list[StockTile] = []
+        for ticker in self._tickers:
+            tile = StockTile(ticker)
+            self._tiles[ticker] = tile
+            new_tiles.append(tile)
+        if new_tiles:
+            self.mount(*new_tiles)
+
+    @property
+    def tickers(self) -> list[str]:
+        return list(self._tickers)

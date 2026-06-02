@@ -55,14 +55,13 @@ class OmxStrip(Static):
         dot_color = "#7dff8c" if snap.market_open else "#7a7a8a"
         text.append("● ", style=dot_color)
         text.append("OMX30", style="bold #a0a0b0")
-        if snap.market_open:
-            if today_pct > 0:
-                day_color = "#7dff8c"
-            elif today_pct < 0:
-                day_color = "#ff6b6b"
-            else:
-                day_color = "#c0c0d0"
-            text.append(f" {today_pct:+.2f}%", style=day_color)
+        if today_pct > 0:
+            day_color = "#7dff8c"
+        elif today_pct < 0:
+            day_color = "#ff6b6b"
+        else:
+            day_color = "#c0c0d0"
+        text.append(f" {today_pct:+.2f}%", style=day_color)
         if snap.ytd_change_percent is not None:
             ytd = snap.ytd_change_percent
             if ytd > 0:
@@ -92,15 +91,6 @@ class OmxStrip(Static):
             snap.current_change_percent,
             early_close,
         )
-
-        if not snap.market_open and session_date == today_stk:
-            if today_pct > 0:
-                arrow, color = "▲", "#7dff8c"
-            elif today_pct < 0:
-                arrow, color = "▼", "#ff6b6b"
-            else:
-                arrow, color = "·", "#7a7a8a"
-            text.append(f"  {arrow} {today_pct:+.2f}%", style=f"bold {color}")
 
         if self.stale_since is not None:
             local = self.stale_since.astimezone()
@@ -165,32 +155,43 @@ class OmxStrip(Static):
             week_color = "#7a7a8a"
         sign = "+" if week_pct > 0 else ""
 
+        text.append("[", style="#5a5a6a")
         text.append("this week ", style="dim #a0a0b0")
         text.append(f"({sign}{week_pct:.1f}%) ", style=week_color)
-        text.append("[", style="#5a5a6a")
         for di in range(5):
             if di > 0:
                 text.append(" ", style="#5a5a6a")
             d = week_start + timedelta(days=di)
             if d == today_stk and early_close:
-                if current_pct > 0:
-                    color = "#7dff8c"
-                elif current_pct < 0:
-                    color = "#ff6b6b"
-                else:
-                    color = "#7a7a8a"
-                text.append("H", style=f"bold {color}")
+                OmxStrip._render_day_pct(text, current_pct, marker="H", bold=True)
             elif d == today_stk and (market_open or session_date == today_stk):
-                pct = current_pct
-                if pct > 0:
-                    text.append("▲", style="#7dff8c")
-                elif pct < 0:
-                    text.append("▼", style="#ff6b6b")
-                else:
-                    text.append("·", style="#7a7a8a")
+                OmxStrip._render_day_pct(text, current_pct)
+            elif d > today_stk:
+                text.append("-", style="#5a5a6a")
+            elif d in date_pct:
+                OmxStrip._render_day_pct(text, date_pct[d])
             else:
-                OmxStrip._render_day_symbol(text, d, date_pct, today_stk)
+                text.append("x", style="#5a5a6a")
         text.append("]", style="#5a5a6a")
+
+    @staticmethod
+    def _render_day_pct(
+        text: Text,
+        pct: float,
+        marker: str | None = None,
+        bold: bool = False,
+    ) -> None:
+        if pct > 0:
+            arrow, color = "▲", "#7dff8c"
+        elif pct < 0:
+            arrow, color = "▼", "#ff6b6b"
+        else:
+            arrow, color = "·", "#7a7a8a"
+        head = marker if marker is not None else arrow
+        head_style = f"bold {color}" if bold else color
+        text.append(head, style=head_style)
+        sign = "+" if pct >= 0 else ""
+        text.append(f"{sign}{pct:.1f}%", style=color)
 
     @staticmethod
     def _render_day_symbol(

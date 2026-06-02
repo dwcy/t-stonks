@@ -10,9 +10,9 @@ from goldsilver.data.models_macro import CommodityQuote, CommoditySymbol
 
 
 _LABEL: dict[CommoditySymbol, str] = {
-    "BRENT": "Brent Oil",
+    "BRENT": "Oil",
     "COPPER": "Copper",
-    "BTC": "Bitcoin",
+    "BTC": "BTC",
 }
 _CURRENCY: dict[CommoditySymbol, str] = {
     "BRENT": "USD",
@@ -45,9 +45,8 @@ class CommodityTile(Static):
 
     def _redraw(self) -> None:
         label = _LABEL.get(self._symbol, self._symbol)
-        currency = _CURRENCY.get(self._symbol, "USD")
         if self.quote is None:
-            self.update(Text(f"{label}  loading…", style="#7a7a8a"))
+            self.update(Text(f"{label} loading…", style="#7a7a8a"))
             return
         quote = self.quote
         change = quote.change
@@ -57,11 +56,10 @@ class CommodityTile(Static):
         color = "#7a7a8a" if flat else ("#7dff8c" if change > 0 else "#ff6b6b")
         sign = "" if change < 0 else ("+" if not flat else " ")
         line = Text.assemble(
-            (f"{label}  ", "#a0a0b0"),
+            (f"{arrow} ", color),
+            (f"{label} ", "#a0a0b0"),
             (f"{quote.price:.2f} ", "bold #e0e0e8"),
-            (f"{currency}  ", "dim #7a7a8a"),
-            (arrow, color),
-            (f" {sign}{pct:.2f}%", color),
+            (f"{sign}{pct:.2f}%", color),
         )
         if self.stale_since is not None:
             local = self.stale_since.astimezone()
