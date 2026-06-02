@@ -207,19 +207,18 @@ class GoldSilverApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with VerticalScroll(id="main-scroll"):
-            if self._settings.mini_tiles:
-                with Horizontal(id="macro-strip"):
-                    for tile_id in self._settings.mini_tiles:
-                        if tile_id in _FX_PAIR_IDS:
-                            pair = cast(FxPair, tile_id)
-                            fx_tile = FxTile(pair)
-                            self._fx_tiles[pair] = fx_tile
-                            yield fx_tile
-                        elif tile_id in _COMMODITY_IDS:
-                            symbol = cast(CommoditySymbol, tile_id)
-                            cm_tile = CommodityTile(symbol)
-                            self._commodity_tiles[symbol] = cm_tile
-                            yield cm_tile
+            with Horizontal(id="macro-strip"):
+                for tile_id in self._settings.mini_tiles:
+                    if tile_id in _FX_PAIR_IDS:
+                        pair = cast(FxPair, tile_id)
+                        fx_tile = FxTile(pair)
+                        self._fx_tiles[pair] = fx_tile
+                        yield fx_tile
+                    elif tile_id in _COMMODITY_IDS:
+                        symbol = cast(CommoditySymbol, tile_id)
+                        cm_tile = CommodityTile(symbol)
+                        self._commodity_tiles[symbol] = cm_tile
+                        yield cm_tile
             omx = OmxStrip()
             self._omx_strip = omx
             yield omx
@@ -274,6 +273,11 @@ class GoldSilverApp(App[None]):
     async def on_mount(self) -> None:
         self._refresh_status_bar()
         self._sync_visible_signals()
+        try:
+            strip = self.query_one("#macro-strip", Horizontal)
+            strip.display = bool(self._settings.mini_tiles)
+        except Exception:
+            pass
         self._service.start()
         self._calendar_service.start()
         self._fx_service.start()
@@ -522,6 +526,30 @@ class GoldSilverApp(App[None]):
             container.remove_class(f"cards-{n}")
         container.add_class(f"cards-{self._settings.metals_columns}")
 
+    def _apply_mini_tiles(self) -> None:
+        try:
+            strip = self.query_one("#macro-strip", Horizontal)
+        except Exception:
+            return
+        strip.remove_children()
+        self._fx_tiles.clear()
+        self._commodity_tiles.clear()
+        new_widgets: list[FxTile | CommodityTile] = []
+        for tile_id in self._settings.mini_tiles:
+            if tile_id in _FX_PAIR_IDS:
+                pair = cast(FxPair, tile_id)
+                ft = FxTile(pair)
+                self._fx_tiles[pair] = ft
+                new_widgets.append(ft)
+            elif tile_id in _COMMODITY_IDS:
+                symbol = cast(CommoditySymbol, tile_id)
+                ct = CommodityTile(symbol)
+                self._commodity_tiles[symbol] = ct
+                new_widgets.append(ct)
+        if new_widgets:
+            strip.mount(*new_widgets)
+        strip.display = bool(new_widgets)
+
     def _apply_news_panel(self) -> None:
         if self._news_panel is None:
             return
@@ -627,6 +655,7 @@ class GoldSilverApp(App[None]):
             visible_signals=dict(self._settings.visible_signals),
             marker_momentum_strategy=self._settings.marker_momentum_strategy,
             marker_recoil_strategy=self._settings.marker_recoil_strategy,
+            mini_tiles=list(self._settings.mini_tiles),
         )
         self.push_screen(
             PlotSettingsScreen(
@@ -785,6 +814,7 @@ class GoldSilverApp(App[None]):
             settings.marker_momentum_strategy != self._settings.marker_momentum_strategy
             or settings.marker_recoil_strategy != self._settings.marker_recoil_strategy
         )
+        mini_tiles_changed = settings.mini_tiles != self._settings.mini_tiles
 
         self._timeframe_index = settings.timeframe_index
         self._chart_kind = settings.chart_kind
@@ -807,6 +837,7 @@ class GoldSilverApp(App[None]):
         self._settings.visible_signals = dict(settings.visible_signals)
         self._settings.marker_momentum_strategy = settings.marker_momentum_strategy
         self._settings.marker_recoil_strategy = settings.marker_recoil_strategy
+        self._settings.mini_tiles = list(settings.mini_tiles)
         try:
             self._settings.save()
         except OSError:
@@ -828,6 +859,8 @@ class GoldSilverApp(App[None]):
             self._apply_metals_columns()
         if visible_changed:
             self._sync_visible_signals()
+        if mini_tiles_changed:
+            self._apply_mini_tiles()
 
         if timeframe_changed:
             self._refresh_status_bar()

@@ -317,6 +317,33 @@ PlotSettingsScreen .switch-label {
     color: #e0e0e8;
 }
 
+PlotSettingsScreen .mini-tile-row {
+    height: 3;
+    align: left middle;
+}
+
+PlotSettingsScreen .mini-tile-row Switch {
+    margin: 0 1 0 0;
+}
+
+PlotSettingsScreen .mini-tile-row .mini-tile-label {
+    height: 3;
+    content-align: left middle;
+    width: 1fr;
+    color: #d0d0e0;
+}
+
+PlotSettingsScreen .mini-tile-row .mini-reorder {
+    min-width: 5;
+    width: 5;
+    height: 3;
+    margin: 0 0 0 1;
+}
+
+#mini-tiles-list {
+    height: auto;
+}
+
 #setting-close {
     margin-top: 1;
     width: 100%;

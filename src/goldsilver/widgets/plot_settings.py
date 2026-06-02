@@ -9,6 +9,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Label, RadioButton, RadioSet, Switch
 
 from goldsilver.data.settings import (
+    ALLOWED_MINI_TILES,
     DEFAULT_GOLD,
     DEFAULT_SILVER,
     GOLD_PRESETS,
@@ -20,6 +21,15 @@ from goldsilver.widgets.chart import ChartKind
 
 
 TIMEFRAME_LABELS = ("today", "5d", "1mo", "3mo")
+
+_MINI_TILE_LABEL: dict[str, str] = {
+    "USDSEK": "USD/SEK",
+    "CADSEK": "CAD/SEK",
+    "EURSEK": "EUR/SEK",
+    "BRENT": "Brent Oil",
+    "COPPER": "Copper",
+    "BTC": "Bitcoin",
+}
 
 
 @dataclass(slots=True)
@@ -40,6 +50,7 @@ class PlotSettings:
     visible_signals: dict[str, bool] = field(default_factory=dict)
     marker_momentum_strategy: str = ""
     marker_recoil_strategy: str = ""
+    mini_tiles: list[str] = field(default_factory=list)
 
 
 class PlotSettingsScreen(ModalScreen[None]):
@@ -97,14 +108,10 @@ class PlotSettingsScreen(ModalScreen[None]):
                 with Vertical(classes="setting-group"):
                     yield Label("Overlays", classes="setting-label")
                     with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_sma, id="setting-sma"
-                        )
+                        yield Switch(value=self._state.show_sma, id="setting-sma")
                         yield Label("SMA (20 / 50)", classes="switch-label")
                     with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_vwap, id="setting-vwap"
-                        )
+                        yield Switch(value=self._state.show_vwap, id="setting-vwap")
                         yield Label("VWAP", classes="switch-label")
                     with Horizontal(classes="switch-row"):
                         yield Switch(
@@ -120,9 +127,7 @@ class PlotSettingsScreen(ModalScreen[None]):
                     for name in self._strategy_names:
                         with Horizontal(classes="switch-row"):
                             yield Switch(
-                                value=self._state.visible_signals.get(
-                                    name, False
-                                ),
+                                value=self._state.visible_signals.get(name, False),
                                 id=self._signal_switch_id(name),
                             )
                             yield Label(name, classes="switch-label")
@@ -138,19 +143,14 @@ class PlotSettingsScreen(ModalScreen[None]):
                         for name in self._momentum_names:
                             yield RadioButton(
                                 name,
-                                value=(
-                                    name
-                                    == self._state.marker_momentum_strategy
-                                ),
+                                value=(name == self._state.marker_momentum_strategy),
                             )
                     yield Label("Recoil source", classes="sub-label")
                     with RadioSet(id="setting-marker-recoil"):
                         for name in self._recoil_names:
                             yield RadioButton(
                                 name,
-                                value=(
-                                    name == self._state.marker_recoil_strategy
-                                ),
+                                value=(name == self._state.marker_recoil_strategy),
                             )
                 with Vertical(classes="setting-group"):
                     yield Label("News feeds", classes="setting-label")
@@ -191,6 +191,11 @@ class PlotSettingsScreen(ModalScreen[None]):
                             classes="switch-label",
                         )
                 with Vertical(classes="setting-group"):
+                    yield Label("Mini tiles", classes="setting-label")
+                    with Vertical(id="mini-tiles-list"):
+                        for row in self._build_mini_rows():
+                            yield row
+                with Vertical(classes="setting-group"):
                     yield Label("Gold color", classes="setting-label")
                     with RadioSet(id="setting-gold-color"):
                         for name in self._gold_names:
@@ -210,13 +215,91 @@ class PlotSettingsScreen(ModalScreen[None]):
 
     @staticmethod
     def _slug(name: str) -> str:
-        return "".join(
-            ch.lower() if ch.isalnum() else "-" for ch in name
-        ).strip("-")
+        return "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
 
     @classmethod
     def _signal_switch_id(cls, name: str) -> str:
         return f"setting-show-{cls._slug(name)}"
+
+    @staticmethod
+    def _mini_slug(tile_id: str) -> str:
+        return tile_id.lower()
+
+    def _build_mini_rows(self) -> list[Horizontal]:
+        enabled = list(self._state.mini_tiles)
+        enabled_set = set(enabled)
+        rows: list[Horizontal] = []
+        for idx, tile_id in enumerate(enabled):
+            slug = self._mini_slug(tile_id)
+            rows.append(
+                Horizontal(
+                    Switch(value=True, id=f"setting-mini-{slug}"),
+                    Label(
+                        _MINI_TILE_LABEL.get(tile_id, tile_id),
+                        classes="mini-tile-label",
+                    ),
+                    Button(
+                        "▲",
+                        id=f"mini-up-{slug}",
+                        disabled=(idx == 0),
+                        classes="mini-reorder",
+                    ),
+                    Button(
+                        "▼",
+                        id=f"mini-down-{slug}",
+                        disabled=(idx == len(enabled) - 1),
+                        classes="mini-reorder",
+                    ),
+                    classes="mini-tile-row",
+                )
+            )
+        for tile_id in ALLOWED_MINI_TILES:
+            if tile_id in enabled_set:
+                continue
+            slug = self._mini_slug(tile_id)
+            rows.append(
+                Horizontal(
+                    Switch(value=False, id=f"setting-mini-{slug}"),
+                    Label(
+                        _MINI_TILE_LABEL.get(tile_id, tile_id),
+                        classes="mini-tile-label",
+                    ),
+                    classes="mini-tile-row",
+                )
+            )
+        return rows
+
+    def _refresh_mini_rows(self) -> None:
+        container = self.query_one("#mini-tiles-list", Vertical)
+        container.remove_children()
+        new_rows = self._build_mini_rows()
+        if new_rows:
+            container.mount(*new_rows)
+
+    def _toggle_mini_tile(self, tile_id: str, enable: bool) -> None:
+        current = list(self._state.mini_tiles)
+        if enable and tile_id not in current:
+            current.append(tile_id)
+        elif not enable and tile_id in current:
+            current.remove(tile_id)
+        else:
+            return
+        self._state.mini_tiles = current
+        self._refresh_mini_rows()
+        self._emit()
+
+    def _move_mini_tile(self, tile_id: str, delta: int) -> None:
+        current = list(self._state.mini_tiles)
+        if tile_id not in current:
+            return
+        idx = current.index(tile_id)
+        target = idx + delta
+        if target < 0 or target >= len(current):
+            return
+        current[idx], current[target] = current[target], current[idx]
+        self._state.mini_tiles = current
+        self._refresh_mini_rows()
+        self._emit()
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         rs_id = event.radio_set.id
@@ -269,34 +352,21 @@ class PlotSettingsScreen(ModalScreen[None]):
         elif sw_id == "setting-refs" and v != self._state.show_day_refs:
             self._state.show_day_refs = v
             self._emit()
-        elif (
-            sw_id == "setting-news-markets"
-            and v != self._state.show_news_markets
-        ):
+        elif sw_id == "setting-news-markets" and v != self._state.show_news_markets:
             self._state.show_news_markets = v
             self._emit()
-        elif (
-            sw_id == "setting-news-trump"
-            and v != self._state.show_news_trump
-        ):
+        elif sw_id == "setting-news-trump" and v != self._state.show_news_trump:
             self._state.show_news_trump = v
             self._emit()
         elif (
-            sw_id == "setting-congress-trades"
-            and v != self._state.show_congress_trades
+            sw_id == "setting-congress-trades" and v != self._state.show_congress_trades
         ):
             self._state.show_congress_trades = v
             self._emit()
-        elif (
-            sw_id == "setting-insider-trades"
-            and v != self._state.show_insider_trades
-        ):
+        elif sw_id == "setting-insider-trades" and v != self._state.show_insider_trades:
             self._state.show_insider_trades = v
             self._emit()
-        elif (
-            sw_id == "setting-stocktwits"
-            and v != self._state.show_stocktwits
-        ):
+        elif sw_id == "setting-stocktwits" and v != self._state.show_stocktwits:
             self._state.show_stocktwits = v
             self._emit()
         elif sw_id.startswith("setting-show-"):
@@ -307,13 +377,26 @@ class PlotSettingsScreen(ModalScreen[None]):
                         self._state.visible_signals[name] = bool(v)
                         self._emit()
                     break
+        elif sw_id.startswith("setting-mini-"):
+            slug = sw_id[len("setting-mini-") :]
+            for tile_id in ALLOWED_MINI_TILES:
+                if self._mini_slug(tile_id) == slug:
+                    self._toggle_mini_tile(tile_id, bool(v))
+                    break
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        bid = event.button.id
+        bid = event.button.id or ""
         if bid == "setting-close":
             self.dismiss()
         elif bid == "open-edit-math":
             self._on_open_math()
+        elif bid.startswith("mini-up-") or bid.startswith("mini-down-"):
+            delta = -1 if bid.startswith("mini-up-") else 1
+            slug = bid.split("-", 2)[2]
+            for tile_id in ALLOWED_MINI_TILES:
+                if self._mini_slug(tile_id) == slug:
+                    self._move_mini_tile(tile_id, delta)
+                    break
 
     def _emit(self) -> None:
         self._on_change(self._state)
