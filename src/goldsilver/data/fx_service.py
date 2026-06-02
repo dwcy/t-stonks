@@ -65,12 +65,12 @@ class FxService:
             await self._refresh_once()
 
     async def _refresh_once(self) -> None:
+        pairs = tuple(_YF_SYMBOL.keys())
         results = await asyncio.gather(
-            self._fetch_pair("USDSEK"),
-            self._fetch_pair("CADSEK"),
+            *[self._fetch_pair(p) for p in pairs],
             return_exceptions=True,
         )
-        for pair, result in zip(("USDSEK", "CADSEK"), results):
+        for pair, result in zip(pairs, results):
             if isinstance(result, FxRate):
                 await self._emit(result)
             else:
