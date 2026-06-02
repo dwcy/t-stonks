@@ -302,9 +302,6 @@ class MetalPanel(Vertical):
         text = Text.assemble(
             (arrow, change_style),
             (f" {sign}{self.change_percent:.2f}%", change_style),
-            ("  (", change_style),
-            (f"{sign}{self.change:.2f}", change_style),
-            (")", change_style),
         )
         indicators = self._render_indicators()
         if indicators.plain:

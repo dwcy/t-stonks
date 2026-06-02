@@ -54,9 +54,6 @@ class FxTile(Static):
             (f"{rate.rate:.4f}  ", "bold #e0e0e8"),
             (arrow, color),
             (f" {sign}{pct:.2f}%", color),
-            ("  (", color),
-            (f"{sign}{change:.4f}", color),
-            (")", color),
         )
         if self.stale_since is not None:
             local = self.stale_since.astimezone()

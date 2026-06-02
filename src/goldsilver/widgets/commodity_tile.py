@@ -58,9 +58,6 @@ class CommodityTile(Static):
             (f"{currency}  ", "dim #7a7a8a"),
             (arrow, color),
             (f" {sign}{pct:.2f}%", color),
-            ("  (", color),
-            (f"{sign}{change:.2f}", color),
-            (")", color),
         )
         if self.stale_since is not None:
             local = self.stale_since.astimezone()
