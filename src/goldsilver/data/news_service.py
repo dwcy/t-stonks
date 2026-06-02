@@ -80,6 +80,10 @@ NEWS_FEEDS: tuple[tuple[NewsSource, str], ...] = (
         "https://www.efn.se/rss",
     ),
     (
+        "TT",
+        "https://news.google.com/rss/search?q=when:24h+site:tt.se&hl=sv-SE&gl=SE&ceid=SE:sv",
+    ),
+    (
         "WHITEHOUSE",
         "https://www.whitehouse.gov/news/feed/",
     ),
@@ -109,6 +113,7 @@ _PLACEHOLDER_PREFIXES = (
     "Placera Forum -",
     "Watchlist -",
     "Stock Screener -",
+    "Most Read -",
 )
 _PLACEHOLDER_LEAD_PATTERNS = (
     re.compile(r"^latest( news)? on .+", re.IGNORECASE),
@@ -131,6 +136,8 @@ def _is_placeholder(title: str) -> bool:
         if not head:
             return True
         if head == tail:
+            return True
+        if head.endswith(f" - {tail}"):
             return True
         if any(p.match(head) for p in _PLACEHOLDER_LEAD_PATTERNS):
             return True

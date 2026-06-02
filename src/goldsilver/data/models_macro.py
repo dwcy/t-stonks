@@ -139,7 +139,7 @@ class Signal(BaseModel):
 NewsSource = Literal[
     "REUTERS", "CNBC", "WllStrtJrnl", "BLOOMBERG", "POLITICO", "YAHOO", "FOX",
     "DgnsIndstr", "SVT", "BREAKIT", "AffrsVrldn",
-    "REDEYE", "BrsKlln", "Placera", "EFN", "TRUMP",
+    "REDEYE", "BrsKlln", "Placera", "EFN", "TT", "TRUMP",
     "WHITEHOUSE", "PressTV", "IRNA", "MEHR",
 ]
 
