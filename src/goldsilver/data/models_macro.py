@@ -10,8 +10,8 @@ CalendarSource = Literal["FED", "ECB", "RIKSBANK"]
 EventImportance = Literal["HIGH", "MED", "LOW"]
 EventStatus = Literal["SCHEDULED", "RELEASED", "CANCELLED", "PASSED"]
 SnapshotStatus = Literal["ok", "stale", "unavailable"]
-FxPair = Literal["USDSEK", "CADSEK"]
-CommoditySymbol = Literal["BRENT"]
+FxPair = Literal["USDSEK", "CADSEK", "EURSEK"]
+CommoditySymbol = Literal["BRENT", "COPPER", "BTC"]
 
 
 class CalendarEvent(BaseModel):
@@ -139,7 +139,7 @@ class Signal(BaseModel):
 NewsSource = Literal[
     "REUTERS", "CNBC", "WllStrtJrnl", "BLOOMBERG", "POLITICO", "YAHOO", "FOX",
     "DgnsIndstr", "SVT", "BREAKIT", "AffrsVrldn",
-    "REDEYE", "BrsKlln", "Placera", "EFN", "TRUMP",
+    "REDEYE", "BrsKlln", "Placera", "EFN", "TT", "TRUMP",
     "WHITEHOUSE", "PressTV", "IRNA", "MEHR",
 ]
 

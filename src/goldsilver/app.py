@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 from rich.text import Text
 from textual.app import App, ComposeResult
@@ -68,6 +69,9 @@ from goldsilver.widgets.chart import ChartKind
 
 
 TRUMP_SOURCE = "TRUMP"
+
+_FX_PAIR_IDS: frozenset[str] = frozenset({"USDSEK", "CADSEK", "EURSEK"})
+_COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC"})
 
 TIMEFRAMES: list[tuple[str, str, str, str | None]] = [
     ("today", "2d", "1m", "today"),
@@ -204,15 +208,17 @@ class GoldSilverApp(App[None]):
         yield Header(show_clock=True)
         with VerticalScroll(id="main-scroll"):
             with Horizontal(id="macro-strip"):
-                usd = FxTile("USDSEK")
-                cad = FxTile("CADSEK")
-                brent = CommodityTile("BRENT")
-                self._fx_tiles["USDSEK"] = usd
-                self._fx_tiles["CADSEK"] = cad
-                self._commodity_tiles["BRENT"] = brent
-                yield usd
-                yield cad
-                yield brent
+                for tile_id in self._settings.mini_tiles:
+                    if tile_id in _FX_PAIR_IDS:
+                        pair = cast(FxPair, tile_id)
+                        fx_tile = FxTile(pair)
+                        self._fx_tiles[pair] = fx_tile
+                        yield fx_tile
+                    elif tile_id in _COMMODITY_IDS:
+                        symbol = cast(CommoditySymbol, tile_id)
+                        cm_tile = CommodityTile(symbol)
+                        self._commodity_tiles[symbol] = cm_tile
+                        yield cm_tile
             omx = OmxStrip()
             self._omx_strip = omx
             yield omx
@@ -267,6 +273,11 @@ class GoldSilverApp(App[None]):
     async def on_mount(self) -> None:
         self._refresh_status_bar()
         self._sync_visible_signals()
+        try:
+            strip = self.query_one("#macro-strip", Horizontal)
+            strip.display = bool(self._settings.mini_tiles)
+        except Exception:
+            pass
         self._service.start()
         self._calendar_service.start()
         self._fx_service.start()
@@ -359,9 +370,7 @@ class GoldSilverApp(App[None]):
 
     async def _seed_stats(self, symbol: str, panel: MetalPanel) -> None:
         try:
-            bars = await self._service.fetch_history(
-                symbol, period="1y", interval="1d"
-            )
+            bars = await self._service.fetch_history(symbol, period="1y", interval="1d")
         except Exception:
             return
         if len(bars) < 5:
@@ -415,21 +424,21 @@ class GoldSilverApp(App[None]):
         if not actions:
             return
         both_buy = (
-            mom is not None and rec is not None
-            and mom.action == "BUY" and rec.action == "BUY"
+            mom is not None
+            and rec is not None
+            and mom.action == "BUY"
+            and rec.action == "BUY"
         )
         both_sell = (
-            mom is not None and rec is not None
-            and mom.action == "SELL" and rec.action == "SELL"
+            mom is not None
+            and rec is not None
+            and mom.action == "SELL"
+            and rec.action == "SELL"
         )
         if "BUY" in actions:
-            panel.add_marker(
-                tick.price, tick.time, (125, 255, 140), heavy=both_buy
-            )
+            panel.add_marker(tick.price, tick.time, (125, 255, 140), heavy=both_buy)
         if "SELL" in actions:
-            panel.add_marker(
-                tick.price, tick.time, (255, 107, 107), heavy=both_sell
-            )
+            panel.add_marker(tick.price, tick.time, (255, 107, 107), heavy=both_sell)
 
     async def _on_status(self, status: str) -> None:
         self._connection_status = status
@@ -516,6 +525,30 @@ class GoldSilverApp(App[None]):
         for n in (1, 2, 3, 4):
             container.remove_class(f"cards-{n}")
         container.add_class(f"cards-{self._settings.metals_columns}")
+
+    def _apply_mini_tiles(self) -> None:
+        try:
+            strip = self.query_one("#macro-strip", Horizontal)
+        except Exception:
+            return
+        strip.remove_children()
+        self._fx_tiles.clear()
+        self._commodity_tiles.clear()
+        new_widgets: list[FxTile | CommodityTile] = []
+        for tile_id in self._settings.mini_tiles:
+            if tile_id in _FX_PAIR_IDS:
+                pair = cast(FxPair, tile_id)
+                ft = FxTile(pair)
+                self._fx_tiles[pair] = ft
+                new_widgets.append(ft)
+            elif tile_id in _COMMODITY_IDS:
+                symbol = cast(CommoditySymbol, tile_id)
+                ct = CommodityTile(symbol)
+                self._commodity_tiles[symbol] = ct
+                new_widgets.append(ct)
+        if new_widgets:
+            strip.mount(*new_widgets)
+        strip.display = bool(new_widgets)
 
     def _apply_news_panel(self) -> None:
         if self._news_panel is None:
@@ -622,6 +655,7 @@ class GoldSilverApp(App[None]):
             visible_signals=dict(self._settings.visible_signals),
             marker_momentum_strategy=self._settings.marker_momentum_strategy,
             marker_recoil_strategy=self._settings.marker_recoil_strategy,
+            mini_tiles=list(self._settings.mini_tiles),
         )
         self.push_screen(
             PlotSettingsScreen(
@@ -656,9 +690,7 @@ class GoldSilverApp(App[None]):
 
     def _on_param_reset(self, strategy_name: str) -> None:
         try:
-            cls = next(
-                c for c in STRATEGY_REGISTRY if c.name == strategy_name
-            )
+            cls = next(c for c in STRATEGY_REGISTRY if c.name == strategy_name)
         except StopIteration:
             return
         fresh = cls()
@@ -772,24 +804,17 @@ class GoldSilverApp(App[None]):
         insider_changed = (
             settings.show_insider_trades != self._settings.show_insider_trades
         )
-        stocktwits_changed = (
-            settings.show_stocktwits != self._settings.show_stocktwits
-        )
+        stocktwits_changed = settings.show_stocktwits != self._settings.show_stocktwits
         gold_changed = settings.gold_color_name != self._settings.gold_color_name
-        silver_changed = (
-            settings.silver_color_name != self._settings.silver_color_name
-        )
-        columns_changed = (
-            settings.metals_columns != self._settings.metals_columns
-        )
+        silver_changed = settings.silver_color_name != self._settings.silver_color_name
+        columns_changed = settings.metals_columns != self._settings.metals_columns
 
         visible_changed = settings.visible_signals != self._settings.visible_signals
         markers_changed = (
-            settings.marker_momentum_strategy
-            != self._settings.marker_momentum_strategy
-            or settings.marker_recoil_strategy
-            != self._settings.marker_recoil_strategy
+            settings.marker_momentum_strategy != self._settings.marker_momentum_strategy
+            or settings.marker_recoil_strategy != self._settings.marker_recoil_strategy
         )
+        mini_tiles_changed = settings.mini_tiles != self._settings.mini_tiles
 
         self._timeframe_index = settings.timeframe_index
         self._chart_kind = settings.chart_kind
@@ -812,6 +837,7 @@ class GoldSilverApp(App[None]):
         self._settings.visible_signals = dict(settings.visible_signals)
         self._settings.marker_momentum_strategy = settings.marker_momentum_strategy
         self._settings.marker_recoil_strategy = settings.marker_recoil_strategy
+        self._settings.mini_tiles = list(settings.mini_tiles)
         try:
             self._settings.save()
         except OSError:
@@ -833,6 +859,8 @@ class GoldSilverApp(App[None]):
             self._apply_metals_columns()
         if visible_changed:
             self._sync_visible_signals()
+        if mini_tiles_changed:
+            self._apply_mini_tiles()
 
         if timeframe_changed:
             self._refresh_status_bar()
@@ -859,7 +887,8 @@ class GoldSilverApp(App[None]):
 
     def _sync_visible_signals(self) -> None:
         names = [
-            n for n in (s.name for s in self._strategies)
+            n
+            for n in (s.name for s in self._strategies)
             if self._settings.visible_signals.get(n, False)
         ]
         for panel in self._panels.values():

@@ -14,7 +14,11 @@ CommodityHandler = Callable[[CommodityQuote], Awaitable[None] | None]
 CommodityStaleHandler = Callable[[CommoditySymbol, datetime], Awaitable[None] | None]
 
 COMMODITY_REFRESH_INTERVAL_S = 60.0
-_YF_SYMBOL: dict[CommoditySymbol, str] = {"BRENT": "BZ=F"}
+_YF_SYMBOL: dict[CommoditySymbol, str] = {
+    "BRENT": "BZ=F",
+    "COPPER": "HG=F",
+    "BTC": "BTC-USD",
+}
 
 
 class CommodityService:
@@ -62,16 +66,23 @@ class CommodityService:
             await self._refresh_once()
 
     async def _refresh_once(self) -> None:
-        quote = await self._fetch_brent()
-        if quote is None:
-            await self._emit_stale("BRENT")
-            return
-        await self._emit(quote)
+        symbols = tuple(_YF_SYMBOL.keys())
+        results = await asyncio.gather(
+            *[self._fetch(s) for s in symbols],
+            return_exceptions=True,
+        )
+        for symbol, result in zip(symbols, results):
+            if isinstance(result, CommodityQuote):
+                await self._emit(result)
+            else:
+                await self._emit_stale(symbol)
 
-    async def _fetch_brent(self) -> CommodityQuote | None:
+    async def _fetch(self, symbol: CommoditySymbol) -> CommodityQuote | None:
+        yf_symbol = _YF_SYMBOL[symbol]
+
         def _sync() -> CommodityQuote | None:
             try:
-                df = yf.Ticker(_YF_SYMBOL["BRENT"]).history(
+                df = yf.Ticker(yf_symbol).history(
                     period="5d", interval="1d"
                 )
             except Exception:
@@ -86,7 +97,7 @@ class CommodityService:
                 last_ts = last_ts.replace(tzinfo=timezone.utc)
             try:
                 return CommodityQuote(
-                    symbol="BRENT",
+                    symbol=symbol,
                     price=closes[-1],
                     previous_close=closes[-2],
                     time=last_ts.astimezone(timezone.utc),

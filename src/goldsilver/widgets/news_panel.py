@@ -43,6 +43,7 @@ _SOURCE_STYLE = {
     "REDEYE": "#ff7043",
     "BrsKlln": "#42a5f5",
     "EFN": "#ffb74d",
+    "TT": "#fecc00",
     "TRUMP": "#bb9af7",
     "WHITEHOUSE": "#e0e0e8",
     "PressTV": "#4caf50",

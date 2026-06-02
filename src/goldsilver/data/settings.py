@@ -43,6 +43,14 @@ DEFAULT_SILVER = "Pearl"
 
 METALS_COLUMNS_CHOICES: tuple[int, ...] = (1, 2, 3, 4)
 
+ALLOWED_MINI_TILES: tuple[str, ...] = (
+    "USDSEK", "CADSEK", "EURSEK", "BTC", "BRENT", "COPPER",
+)
+
+
+def _default_mini_tiles() -> list[str]:
+    return ["USDSEK", "CADSEK", "EURSEK", "BTC", "BRENT", "COPPER"]
+
 
 def _default_visible_signals() -> dict[str, bool]:
     from goldsilver.data.signal_strategies import (
@@ -76,6 +84,7 @@ class AppSettings:
     silver_color_name: str = DEFAULT_SILVER
     metals_columns: int = 2
     stock_tickers: list[str] = field(default_factory=_default_stock_tickers)
+    mini_tiles: list[str] = field(default_factory=_default_mini_tiles)
     visible_signals: dict[str, bool] = field(
         default_factory=_default_visible_signals
     )
@@ -106,6 +115,19 @@ class AppSettings:
                 seen.add(t)
                 cleaned.append(t)
             self.stock_tickers = cleaned
+        if not isinstance(self.mini_tiles, list):
+            self.mini_tiles = _default_mini_tiles()
+        else:
+            cleaned_tiles: list[str] = []
+            seen_tiles: set[str] = set()
+            for raw in self.mini_tiles:
+                if not isinstance(raw, str):
+                    continue
+                if raw not in ALLOWED_MINI_TILES or raw in seen_tiles:
+                    continue
+                seen_tiles.add(raw)
+                cleaned_tiles.append(raw)
+            self.mini_tiles = cleaned_tiles
         from goldsilver.data.signal_strategies import (
             DEFAULT_MARKER_MOMENTUM,
             DEFAULT_MARKER_RECOIL,

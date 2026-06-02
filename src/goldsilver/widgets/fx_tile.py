@@ -12,6 +12,7 @@ from goldsilver.data.models_macro import FxPair, FxRate
 _PAIR_LABEL: dict[FxPair, str] = {
     "USDSEK": "USD/SEK",
     "CADSEK": "CAD/SEK",
+    "EURSEK": "EUR/SEK",
 }
 
 
@@ -54,9 +55,6 @@ class FxTile(Static):
             (f"{rate.rate:.4f}  ", "bold #e0e0e8"),
             (arrow, color),
             (f" {sign}{pct:.2f}%", color),
-            ("  (", color),
-            (f"{sign}{change:.4f}", color),
-            (")", color),
         )
         if self.stale_since is not None:
             local = self.stale_since.astimezone()
