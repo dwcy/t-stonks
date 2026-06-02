@@ -55,11 +55,14 @@ class CommodityTile(Static):
         arrow = "▬" if flat else ("▲" if change > 0 else "▼")
         color = "#7a7a8a" if flat else ("#7dff8c" if change > 0 else "#ff6b6b")
         sign = "" if change < 0 else ("+" if not flat else " ")
+        price_str = (
+            f"{quote.price:,.0f}" if quote.price >= 1000 else f"{quote.price:.2f}"
+        )
         line = Text.assemble(
             (f"{arrow} ", color),
             (f"{label} ", "#a0a0b0"),
-            (f"{quote.price:.2f} ", "bold #e0e0e8"),
-            (f"{sign}{pct:.2f}%", color),
+            (f"{sign}{pct:.2f}% ", color),
+            (price_str, "bold #e0e0e8"),
         )
         if self.stale_since is not None:
             local = self.stale_since.astimezone()
