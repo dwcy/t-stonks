@@ -44,7 +44,7 @@ class OmxStrip(Static):
         date_pct: dict[date, float] = {d.date: d.change_percent for d in snap.days}
         today_stk = snap.fetched_at.astimezone(STOCKHOLM).date()
         session_date = snap.latest_session_date
-        if session_date == today_stk:
+        if today_stk.weekday() < 5:
             date_pct[today_stk] = snap.current_change_percent
 
         this_monday = today_stk - timedelta(days=today_stk.weekday())
