@@ -13,6 +13,7 @@ from textual.widgets import (
     Label,
     RadioButton,
     RadioSet,
+    Select,
     Static,
     Switch,
     TabbedContent,
@@ -23,12 +24,12 @@ from goldsilver.data.models import GOLD, SILVER
 from goldsilver.data.trade_models import SellMode, SimulatorSummary, TriggerMode
 from goldsilver.widgets.trade_backtest import (
     compose_backtest_pane,
+    control_symbol,
     fmt_money as _fmt_money,
     fmt_pct as _fmt_pct,
     pnl_color as _pnl_color,
     refresh_day_options,
     run_and_render,
-    run_button_ids,
     trade_cells,
 )
 
@@ -40,6 +41,7 @@ class TradeSimulatorScreen(ModalScreen[None]):
         super().__init__()
         self._rendered_trade_ids: set[str] = set()
         self._rendered_history_days: set[str] = set()
+        self._bt_rendered: dict[str, set[str]] = {GOLD: set(), SILVER: set()}
 
     def compose(self) -> ComposeResult:
         with Container(id="trade-sim-dialog"):
@@ -101,8 +103,8 @@ class TradeSimulatorScreen(ModalScreen[None]):
                         history_table.add_column("Trades", key="trades")
                         history_table.add_column("Realized P/L", key="pnl")
                         yield history_table
-                    yield from compose_backtest_pane(GOLD)
-                    yield from compose_backtest_pane(SILVER)
+                    yield from compose_backtest_pane(GOLD, self.app._settings)
+                    yield from compose_backtest_pane(SILVER, self.app._settings)
             with Horizontal(id="trade-sim-footer"):
                 yield Button("Close", id="sim-close")
                 yield Button("Liquidate now", id="sim-liquidate", variant="warning")
@@ -258,7 +260,16 @@ class TradeSimulatorScreen(ModalScreen[None]):
             mode_t: TriggerMode = "either" if idx == 0 else "both"
             await self._service().update_settings(trigger_mode=mode_t)
 
+    async def on_select_changed(self, event: Select.Changed) -> None:
+        symbol = control_symbol(event.select.id)
+        if symbol is not None:
+            await run_and_render(self, symbol)
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
+        bt_symbol = control_symbol(event.input.id)
+        if bt_symbol is not None:
+            await run_and_render(self, bt_symbol)
+            return
         if event.input.id == "sim-sell-pct":
             try:
                 pct = float(event.value) / 100.0
@@ -268,7 +279,7 @@ class TradeSimulatorScreen(ModalScreen[None]):
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
-        run_symbol = run_button_ids().get(bid or "")
+        run_symbol = control_symbol(bid)
         if run_symbol is not None:
             await run_and_render(self, run_symbol)
         elif bid == "sim-close":

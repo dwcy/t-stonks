@@ -73,6 +73,30 @@ async def test_backtest_does_not_write_trades_json(
 
 
 @pytest.mark.asyncio
+async def test_overrides_change_results_without_touching_settings() -> None:
+    save_day(GOLD, DAY, _volatile_day_bars())
+    settings = AppSettings()
+
+    either = await run_backtest(GOLD, DAY, settings, trigger_mode="either")
+    both = await run_backtest(GOLD, DAY, settings, trigger_mode="both")
+
+    assert len(both.recent_trades) <= len(either.recent_trades)
+    assert settings.simulator.trigger_mode == "either"
+
+
+@pytest.mark.asyncio
+async def test_momentum_override_is_honored() -> None:
+    save_day(GOLD, DAY, _volatile_day_bars())
+    settings = AppSettings()
+
+    summary = await run_backtest(
+        GOLD, DAY, settings, momentum="ROC Momentum", recoil="RSI Recoil"
+    )
+
+    assert summary.initial_deposit == settings.simulator.initial_deposit
+
+
+@pytest.mark.asyncio
 async def test_backtest_missing_day_returns_initial_deposit() -> None:
     settings = AppSettings()
 

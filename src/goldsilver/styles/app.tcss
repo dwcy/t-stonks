@@ -496,12 +496,36 @@ TradeSimulatorScreen #bt-trades-silver {
 }
 
 TradeSimulatorScreen .bt-controls {
-    height: 3;
+    height: auto;
     width: 100%;
+    align: left middle;
+}
+
+TradeSimulatorScreen .bt-label {
+    width: auto;
+    height: 3;
+    content-align: left middle;
+    padding: 0 1;
+    color: #a0a0b0;
 }
 
 TradeSimulatorScreen .bt-day-select {
     width: 24;
+    margin: 0 1 0 0;
+}
+
+TradeSimulatorScreen .bt-select {
+    width: 22;
+    margin: 0 1 0 0;
+}
+
+TradeSimulatorScreen .bt-select-sm {
+    width: 14;
+    margin: 0 1 0 0;
+}
+
+TradeSimulatorScreen .bt-pct-input {
+    width: 8;
     margin: 0 1 0 0;
 }
 
