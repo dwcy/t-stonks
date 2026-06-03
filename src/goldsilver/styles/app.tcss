@@ -487,10 +487,32 @@ TradeSimulatorScreen #sim-tabs {
 }
 
 TradeSimulatorScreen #sim-trades,
-TradeSimulatorScreen #sim-history {
+TradeSimulatorScreen #sim-history,
+TradeSimulatorScreen #bt-trades-gold,
+TradeSimulatorScreen #bt-trades-silver {
     height: 1fr;
     min-height: 14;
     width: 100%;
+}
+
+TradeSimulatorScreen .bt-controls {
+    height: 3;
+    width: 100%;
+}
+
+TradeSimulatorScreen .bt-day-select {
+    width: 24;
+    margin: 0 1 0 0;
+}
+
+TradeSimulatorScreen .bt-controls Button {
+    width: 10;
+}
+
+TradeSimulatorScreen .bt-stats {
+    height: auto;
+    width: 100%;
+    padding: 1 0;
 }
 
 #trade-sim-footer {

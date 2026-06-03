@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
@@ -21,56 +19,18 @@ from textual.widgets import (
     TabPane,
 )
 
+from goldsilver.data.models import GOLD, SILVER
 from goldsilver.data.trade_models import SellMode, SimulatorSummary, TriggerMode
-
-if TYPE_CHECKING:
-    from goldsilver.app import GoldSilverApp
-
-
-_REASON_LABEL: dict[str, str] = {
-    "signal_buy": "Buy signal",
-    "signal_sell": "Sell signal",
-    "eod_liquidation": "End-of-day liquidation",
-    "manual_reset": "Manual reset",
-}
-
-_SYMBOL_LABEL: dict[str, str] = {
-    "XAU": "Gold",
-    "XAG": "Silver",
-}
-
-
-def _describe_reason(reason: str, side: str, signals: dict[str, str]) -> str:
-    if reason == "eod_liquidation":
-        return "End-of-day liquidation"
-    if reason == "manual_reset":
-        return "Manual reset"
-    firing = [
-        name.capitalize()
-        for name in ("momentum", "recoil")
-        if signals.get(name) == side
-    ]
-    if firing:
-        return f"{' + '.join(firing)} {side.lower()} signal"
-    return _REASON_LABEL.get(reason, reason)
-
-
-def _fmt_money(v: float) -> str:
-    sign = "-" if v < 0 else ""
-    return f"{sign}${abs(v):,.2f}"
-
-
-def _fmt_pct(v: float) -> str:
-    sign = "+" if v >= 0 else ""
-    return f"{sign}{v:.2f}%"
-
-
-def _pnl_color(v: float) -> str:
-    if v > 0.0001:
-        return "#7dff8c"
-    if v < -0.0001:
-        return "#ff6b6b"
-    return "#a0a0b0"
+from goldsilver.widgets.trade_backtest import (
+    compose_backtest_pane,
+    fmt_money as _fmt_money,
+    fmt_pct as _fmt_pct,
+    pnl_color as _pnl_color,
+    refresh_day_options,
+    run_and_render,
+    run_button_ids,
+    trade_cells,
+)
 
 
 class TradeSimulatorScreen(ModalScreen[None]):
@@ -133,7 +93,7 @@ class TradeSimulatorScreen(ModalScreen[None]):
                             "Reason",
                         )
                         yield trades_table
-                    with TabPane("History", id="sim-tab-history"):
+                    with TabPane("Trade Simulator History", id="sim-tab-history"):
                         history_table = DataTable(id="sim-history", zebra_stripes=True)
                         history_table.add_column("Date", key="date")
                         history_table.add_column("Buys", key="buys")
@@ -141,6 +101,8 @@ class TradeSimulatorScreen(ModalScreen[None]):
                         history_table.add_column("Trades", key="trades")
                         history_table.add_column("Realized P/L", key="pnl")
                         yield history_table
+                    yield from compose_backtest_pane(GOLD)
+                    yield from compose_backtest_pane(SILVER)
             with Horizontal(id="trade-sim-footer"):
                 yield Button("Close", id="sim-close")
                 yield Button("Liquidate now", id="sim-liquidate", variant="warning")
@@ -149,6 +111,8 @@ class TradeSimulatorScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         self._refresh()
         self.set_interval(1.0, self._refresh)
+        refresh_day_options(self, GOLD)
+        refresh_day_options(self, SILVER)
 
     def _refresh(self) -> None:
         svc = self._service()
@@ -243,23 +207,7 @@ class TradeSimulatorScreen(ModalScreen[None]):
         for t in s.recent_trades:
             if t.trade_id in self._rendered_trade_ids:
                 continue
-            local = t.ts_utc.astimezone()
-            reason = _describe_reason(t.reason, t.side, t.signals)
-            symbol = _SYMBOL_LABEL.get(t.symbol, t.symbol)
-            pnl_str = _fmt_money(t.realized_pnl) if t.side == "SELL" else "-"
-            side_color = "#7dff8c" if t.side == "BUY" else "#ff6b6b"
-            side_cell = Text(t.side, style=f"bold {side_color}")
-            table.add_row(
-                local.strftime("%m-%d %H:%M"),
-                symbol,
-                side_cell,
-                f"{t.units:.4f}",
-                f"{t.position_units:.4f}",
-                f"${t.price:,.2f}",
-                pnl_str,
-                reason,
-                key=t.trade_id,
-            )
+            table.add_row(*trade_cells(t), key=t.trade_id)
             self._rendered_trade_ids.add(t.trade_id)
 
     def _populate_history(self, s: SimulatorSummary) -> None:
@@ -320,7 +268,10 @@ class TradeSimulatorScreen(ModalScreen[None]):
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
-        if bid == "sim-close":
+        run_symbol = run_button_ids().get(bid or "")
+        if run_symbol is not None:
+            await run_and_render(self, run_symbol)
+        elif bid == "sim-close":
             self.dismiss()
         elif bid == "sim-liquidate":
             last_prices = getattr(self.app, "_last_price", {})

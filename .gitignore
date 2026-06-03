@@ -35,5 +35,8 @@ Thumbs.db
 # Logs
 *.log
 
+# Local market-data archive
+/history/
+
 # Claude Code (local-only)
 .claude/settings.local.json

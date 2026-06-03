@@ -39,15 +39,18 @@ class TradesService:
         *,
         settings_persister: SettingsPersister | None = None,
         on_enable_changed: EnableChangedCallback | None = None,
+        persist: bool = True,
     ) -> None:
         self._settings = settings
         self._settings_persister = settings_persister
         self._on_enable_changed = on_enable_changed
+        self._persist_enabled = persist
         self._state = SimulatorState(cash=settings.initial_deposit)
         self._trades: list[Trade] = []
         self._daily: list[DailyPnL] = []
         self._lock = asyncio.Lock()
-        self._load()
+        if persist:
+            self._load()
 
     async def on_signal(
         self,
@@ -88,7 +91,8 @@ class TradesService:
                 if trade is not None:
                     self._trades.append(trade)
             self._state.last_processed_ts[symbol] = ts_utc
-            await asyncio.to_thread(self._persist)
+            if self._persist_enabled:
+                await asyncio.to_thread(self._persist)
 
     async def liquidate_now(
         self, last_prices: dict[str, tuple[float, datetime]]
@@ -382,6 +386,8 @@ class TradesService:
         }
 
     def _persist(self) -> None:
+        if not self._persist_enabled:
+            return
         path = trades_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {

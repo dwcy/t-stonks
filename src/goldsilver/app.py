@@ -46,6 +46,7 @@ from goldsilver.data.signal_strategies import (
     STRATEGY_REGISTRY,
     build_strategies,
 )
+from goldsilver.data.history_service import HistoryService
 from goldsilver.data.service import POLL_INTERVAL_S
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
@@ -126,6 +127,7 @@ class GoldSilverApp(App[None]):
             tick_handler=self._on_tick,
             status_handler=self._on_status,
         )
+        self._history_service = HistoryService(self._service.fetch_history)
         self._calendar_service = CalendarService(handler=self._on_calendar)
         self._fx_service = FxService(
             handler=self._on_fx_rate,
@@ -291,6 +293,7 @@ class GoldSilverApp(App[None]):
         except Exception:
             pass
         self._service.start()
+        self._history_service.start()
         self._calendar_service.start()
         self._fx_service.start()
         self._commodity_service.start()
@@ -307,6 +310,7 @@ class GoldSilverApp(App[None]):
 
     async def on_unmount(self) -> None:
         await self._service.stop()
+        await self._history_service.stop()
         await self._calendar_service.stop()
         await self._fx_service.stop()
         await self._commodity_service.stop()
