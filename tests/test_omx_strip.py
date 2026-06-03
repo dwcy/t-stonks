@@ -1,4 +1,4 @@
-"""Regression test for the OMX 0w today-cell arrow."""
+"""Regression tests for the OMX 0w day-cell arrows."""
 
 from __future__ import annotations
 
@@ -20,17 +20,17 @@ class _Harness(App[None]):
 
 
 def _overnight_snapshot() -> OmxSnapshot:
-    # Thursday 2026-06-04, 06:00 (before open); last session was Wed 2026-06-03.
+    # Thursday 2026-06-04, 06:00 (before open); last session was Wed 2026-06-03,
+    # which is not yet in the daily history feed (only its live close % is known).
     fetched = datetime(2026, 6, 4, 6, 0, tzinfo=STOCKHOLM).astimezone(timezone.utc)
-    this_week = [
-        OmxDay(date=date(2026, 6, 1), close=2500.0, change_percent=0.0),
-        OmxDay(date=date(2026, 6, 2), close=2500.0, change_percent=0.0),
-        OmxDay(date=date(2026, 6, 3), close=2500.0, change_percent=0.0),
+    history = [
+        OmxDay(date=date(2026, 6, 1), close=2500.0, change_percent=-0.5),
+        OmxDay(date=date(2026, 6, 2), close=2520.0, change_percent=0.8),
     ]
     return OmxSnapshot(
-        days=tuple(this_week),
-        current_price=2510.0,
-        current_change_percent=0.40,
+        days=tuple(history),
+        current_price=2512.0,
+        current_change_percent=-0.30,
         fetched_at=fetched,
         market_open=False,
         latest_session_date=date(2026, 6, 3),
@@ -39,8 +39,13 @@ def _overnight_snapshot() -> OmxSnapshot:
     )
 
 
+def _zero_week_symbols(plain: str) -> list[str]:
+    segment = plain.split("0w", 1)[1].split("]", 1)[0]
+    return segment.split("%) ", 1)[1].split()
+
+
 @pytest.mark.asyncio
-async def test_today_cell_shows_arrow_when_last_session_was_yesterday() -> None:
+async def test_last_session_gets_arrow_today_pre_open_stays_pending() -> None:
     app = _Harness()
     async with app.run_test() as pilot:
         strip = app.query_one(OmxStrip)
@@ -48,5 +53,5 @@ async def test_today_cell_shows_arrow_when_last_session_was_yesterday() -> None:
         await pilot.pause()
         plain = str(strip.render())
 
-    assert "0w" in plain
-    assert "▲" in plain
+    # Mon ▼, Tue ▲, Wed ▼ (last session, injected), Thu x (today, not started), Fri -
+    assert _zero_week_symbols(plain) == ["▼", "▲", "▼", "x", "-"]
