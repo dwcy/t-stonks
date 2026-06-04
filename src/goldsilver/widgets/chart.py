@@ -17,6 +17,7 @@ ZOOM_MINUTES: dict[ChartZoom, int] = {"24h": 24 * 60, "3h": 3 * 60, "1h": 60}
 ZOOM_ORDER: tuple[ChartZoom, ...] = ("24h", "3h", "1h")
 BAR_RETENTION_HOURS = 25
 MAX_BARS = BAR_RETENTION_HOURS * 60  # 1500 @ 1-min bucket
+STALE_SLIDE_MIN = 2.0  # only slide window by wall-clock once the feed lags this long
 
 UP_COLOR = (125, 255, 140)
 DOWN_COLOR = (255, 107, 107)
@@ -78,8 +79,19 @@ class PriceChart(PlotextPlot):
         self.set_interval(1.0, self._clock_tick)
 
     def _clock_tick(self) -> None:
-        if self._view.mode == "live" and len(self._bars) >= 2:
+        if self._view.mode != "live" or len(self._bars) < 2:
+            return
+        origin = self._bars[0].time
+        span = (self._bars[-1].time - origin).total_seconds() / 60.0
+        if self._now_offset(origin) - span > STALE_SLIDE_MIN:
             self._redraw()
+
+    @staticmethod
+    def _now_offset(origin: datetime) -> float:
+        now = datetime.now(timezone.utc)
+        if origin.tzinfo is None:
+            now = now.replace(tzinfo=None)
+        return (now - origin).total_seconds() / 60.0
 
     def seed(
         self,
@@ -297,11 +309,11 @@ class PriceChart(PlotextPlot):
 
         if self._view.mode == "live":
             window = ZOOM_MINUTES[self._view.zoom]
-            now = datetime.now(timezone.utc)
-            if origin.tzinfo is None:
-                now = now.replace(tzinfo=None)
-            now_offset = (now - origin).total_seconds() / 60.0
-            xmax = max(span_minutes, now_offset)
+            now_offset = self._now_offset(origin)
+            if now_offset - span_minutes > STALE_SLIDE_MIN:
+                xmax = now_offset
+            else:
+                xmax = span_minutes
             xmin = max(0.0, xmax - window)
         else:
             xmin = 0.0
