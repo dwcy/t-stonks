@@ -443,26 +443,20 @@ class GoldSilverApp(App[None]):
         mom: Signal | None,
         rec: Signal | None,
     ) -> None:
-        if mom is None and rec is None:
-            return
+        mom_fresh = mom is not None and mom.at == tick.time
+        rec_fresh = rec is not None and rec.at == tick.time
         actions: set[str] = set()
-        if mom is not None and mom.action in ("BUY", "SELL"):
+        if mom_fresh and mom.action in ("BUY", "SELL"):
             actions.add(mom.action)
-        if rec is not None and rec.action in ("BUY", "SELL"):
+        if rec_fresh and rec.action in ("BUY", "SELL"):
             actions.add(rec.action)
         if not actions:
             return
         both_buy = (
-            mom is not None
-            and rec is not None
-            and mom.action == "BUY"
-            and rec.action == "BUY"
+            mom_fresh and rec_fresh and mom.action == "BUY" and rec.action == "BUY"
         )
         both_sell = (
-            mom is not None
-            and rec is not None
-            and mom.action == "SELL"
-            and rec.action == "SELL"
+            mom_fresh and rec_fresh and mom.action == "SELL" and rec.action == "SELL"
         )
         if "BUY" in actions:
             panel.add_marker(tick.price, tick.time, (125, 255, 140), heavy=both_buy)
