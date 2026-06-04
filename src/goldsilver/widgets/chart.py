@@ -375,7 +375,7 @@ class PriceChart(PlotextPlot):
             if self._sess_low is not None:
                 self.plt.hline(self._sess_low, color=DOWN_COLOR)
 
-        if self._markers:
+        if self._markers and self._kind != "candle":
             visible_start = self._bars[0].time
             visible_end = self._bars[-1].time
             by_group: dict[
