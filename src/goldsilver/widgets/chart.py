@@ -336,7 +336,9 @@ class PriceChart(PlotextPlot):
                 colors=[UP_COLOR, DOWN_COLOR],
             )
         elif v_xs:
-            self.plt.scatter(v_xs, v_closes, color=self._color, marker="braille")
+            dots = self._view.mode == "live" and self._view.zoom == "24h"
+            draw = self.plt.scatter if dots else self.plt.plot
+            draw(v_xs, v_closes, color=self._color, marker="braille")
 
         if self._show_sma:
             for period, dim in ((20, 0.75), (50, 0.50)):
