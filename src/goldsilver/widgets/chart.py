@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Iterable, Literal
 
 from textual_plotext import PlotextPlot
@@ -62,9 +62,7 @@ class PriceChart(PlotextPlot):
         self._prev_close: float | None = None
         self._sess_high: float | None = None
         self._sess_low: float | None = None
-        self._markers: list[
-            tuple[datetime, float, tuple[int, int, int], bool]
-        ] = []
+        self._markers: list[tuple[datetime, float, tuple[int, int, int], bool]] = []
         self._view = ChartViewState()
 
     @property
@@ -77,6 +75,11 @@ class PriceChart(PlotextPlot):
 
     def on_mount(self) -> None:
         self._redraw()
+        self.set_interval(1.0, self._clock_tick)
+
+    def _clock_tick(self) -> None:
+        if self._view.mode == "live" and len(self._bars) >= 2:
+            self._redraw()
 
     def seed(
         self,
@@ -294,8 +297,12 @@ class PriceChart(PlotextPlot):
 
         if self._view.mode == "live":
             window = ZOOM_MINUTES[self._view.zoom]
-            xmin = max(0.0, span_minutes - window)
-            xmax = span_minutes
+            now = datetime.now(timezone.utc)
+            if origin.tzinfo is None:
+                now = now.replace(tzinfo=None)
+            now_offset = (now - origin).total_seconds() / 60.0
+            xmax = max(span_minutes, now_offset)
+            xmin = max(0.0, xmax - window)
         else:
             xmin = 0.0
             xmax = span_minutes
@@ -410,9 +417,7 @@ class PriceChart(PlotextPlot):
                         pin_xs.append(px)
                         pin_ys.append(self._bars[idx].close)
             if pin_xs:
-                self.plt.scatter(
-                    pin_xs, pin_ys, color=PIN_COLOR, marker="●"
-                )
+                self.plt.scatter(pin_xs, pin_ys, color=PIN_COLOR, marker="●")
 
         ticks, labels = self._compute_ticks(origin, xmin, xmax)
         if ticks:
