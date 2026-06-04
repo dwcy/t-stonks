@@ -336,7 +336,7 @@ class PriceChart(PlotextPlot):
                 colors=[UP_COLOR, DOWN_COLOR],
             )
         elif v_xs:
-            self.plt.plot(v_xs, v_closes, color=self._color, marker="braille")
+            self.plt.scatter(v_xs, v_closes, color=self._color, marker="braille")
 
         if self._show_sma:
             for period, dim in ((20, 0.75), (50, 0.50)):
