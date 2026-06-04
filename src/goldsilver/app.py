@@ -120,6 +120,7 @@ class GoldSilverApp(App[None]):
         super().__init__()
         self._settings = AppSettings.load()
         self._panels: dict[str, MetalPanel] = {}
+        self._dup_panels: dict[str, MetalPanel] = {}
         self._fx_tiles: dict[FxPair, FxTile] = {}
         self._commodity_tiles: dict[CommoditySymbol, CommodityTile] = {}
         self._calendar_panel: CalendarPanel | None = None
@@ -258,8 +259,26 @@ class GoldSilverApp(App[None]):
                 )
                 self._panels[GOLD] = gold
                 self._panels[SILVER] = silver
+                gold2 = MetalPanel(
+                    GOLD,
+                    "GOLD (2)",
+                    accent_color=self._settings.gold_rgb(),
+                    classes="-gold -dup",
+                )
+                silver2 = MetalPanel(
+                    SILVER,
+                    "SILVER (2)",
+                    accent_color=self._settings.silver_rgb(),
+                    classes="-silver -dup",
+                )
+                gold2.display = self._settings.show_dual_charts
+                silver2.display = self._settings.show_dual_charts
+                self._dup_panels[GOLD] = gold2
+                self._dup_panels[SILVER] = silver2
                 yield gold
                 yield silver
+                yield gold2
+                yield silver2
             calendar = CalendarPanel()
             self._calendar_panel = calendar
             yield calendar
@@ -323,14 +342,45 @@ class GoldSilverApp(App[None]):
         await self._stocktwits_service.stop()
 
     def _seed_all(self) -> None:
-        for symbol, panel in self._panels.items():
+        for symbol in self._panels:
             self.run_worker(
-                self._seed_panel(symbol, panel),
+                self._seed_panel(symbol),
                 exclusive=False,
                 group=f"seed-{symbol}",
             )
 
-    async def _seed_panel(self, symbol: str, panel: MetalPanel) -> None:
+    def _symbol_panels(self, symbol: str) -> list[MetalPanel]:
+        out: list[MetalPanel] = []
+        primary = self._panels.get(symbol)
+        if primary is not None:
+            out.append(primary)
+        dup = self._dup_panels.get(symbol)
+        if dup is not None and self._settings.show_dual_charts:
+            out.append(dup)
+        return out
+
+    def _symbol_panels_with_kind(
+        self, symbol: str
+    ) -> list[tuple[MetalPanel, ChartKind]]:
+        out: list[tuple[MetalPanel, ChartKind]] = []
+        primary = self._panels.get(symbol)
+        if primary is not None:
+            out.append((primary, self._chart_kind))
+        dup = self._dup_panels.get(symbol)
+        if dup is not None and self._settings.show_dual_charts:
+            out.append((dup, self._settings.chart_kind2))
+        return out
+
+    def _all_metal_panels(self) -> list[MetalPanel]:
+        panels = list(self._panels.values())
+        if self._settings.show_dual_charts:
+            panels.extend(self._dup_panels.values())
+        return panels
+
+    async def _seed_panel(self, symbol: str) -> None:
+        group = self._symbol_panels_with_kind(symbol)
+        if not group:
+            return
         if self._chart_mode == "live":
             period, interval = "2d", "1m"
         else:
@@ -349,19 +399,21 @@ class GoldSilverApp(App[None]):
             bars = [b for b in bars if b.time.astimezone(timezone.utc) >= cutoff]
         elif self._timeframe_filter == "today":
             bars = _filter_to_stockholm_today(bars)
-        panel.seed_history(
-            bars,
-            chart_kind=self._chart_kind,
-            show_sma=self._show_sma,
-            show_vwap=self._show_vwap,
-            show_day_refs=self._show_day_refs,
-        )
-        panel.set_chart_mode(self._chart_mode)
-        if self._chart_mode == "live":
-            panel.set_chart_zoom(self._chart_zoom)
-        panel.clear_markers()
+        for panel, kind in group:
+            panel.seed_history(
+                bars,
+                chart_kind=kind,
+                show_sma=self._show_sma,
+                show_vwap=self._show_vwap,
+                show_day_refs=self._show_day_refs,
+            )
+            panel.set_chart_mode(self._chart_mode)
+            if self._chart_mode == "live":
+                panel.set_chart_zoom(self._chart_zoom)
+            panel.clear_markers()
+        panels = [p for p, _ in group]
         self.run_worker(
-            self._seed_stats(symbol, panel),
+            self._seed_stats(symbol, panels),
             exclusive=False,
             group=f"stats-{symbol}",
         )
@@ -384,9 +436,10 @@ class GoldSilverApp(App[None]):
             rec_at = rec_history.get(ts)
             heavy = rec_at is not None and rec_at[1] == action
             color = (125, 255, 140) if action == "BUY" else (255, 107, 107)
-            panel.add_marker(price, ts, color, heavy=heavy)
+            for panel in panels:
+                panel.add_marker(price, ts, color, heavy=heavy)
 
-    async def _seed_stats(self, symbol: str, panel: MetalPanel) -> None:
+    async def _seed_stats(self, symbol: str, panels: list[MetalPanel]) -> None:
         try:
             bars = await self._service.fetch_history(symbol, period="1y", interval="1d")
         except Exception:
@@ -401,30 +454,33 @@ class GoldSilverApp(App[None]):
         week_avg = sum(b.close for b in week) / len(week)
         month_avg = sum(b.close for b in month) / len(month)
         year_avg = sum(b.close for b in year) / len(year)
-        panel.set_stats(
-            week_high=week_high,
-            week_low=week_low,
-            week_avg=week_avg,
-            month_avg=month_avg,
-            year_avg=year_avg,
-        )
+        for panel in panels:
+            panel.set_stats(
+                week_high=week_high,
+                week_low=week_low,
+                week_avg=week_avg,
+                month_avg=month_avg,
+                year_avg=year_avg,
+            )
 
     async def _on_tick(self, tick: Tick) -> None:
         self._last_tick_at = tick.time
         self._last_price[tick.symbol] = (tick.price, tick.time)
-        panel = self._panels.get(tick.symbol)
+        panels = self._symbol_panels(tick.symbol)
         mom: Signal | None = None
         rec: Signal | None = None
-        if panel is not None:
-            panel.apply_tick(tick)
+        if panels:
+            for panel in panels:
+                panel.apply_tick(tick)
             signals: dict[str, Signal] = {}
             for strategy in self._strategies:
                 sig = strategy.observe(tick.symbol, tick.price, tick.time)
                 signals[strategy.name] = sig
-                panel.apply_signal(sig)
+                for panel in panels:
+                    panel.apply_signal(sig)
             mom = signals.get(self._settings.marker_momentum_strategy)
             rec = signals.get(self._settings.marker_recoil_strategy)
-            self._maybe_draw_marker(panel, tick, mom, rec)
+            self._maybe_draw_marker(panels, tick, mom, rec)
         if self._settings.simulator.enabled:
             await self._trades.on_signal(
                 symbol=tick.symbol,
@@ -438,7 +494,7 @@ class GoldSilverApp(App[None]):
 
     def _maybe_draw_marker(
         self,
-        panel: MetalPanel,
+        panels: list[MetalPanel],
         tick: Tick,
         mom: Signal | None,
         rec: Signal | None,
@@ -459,9 +515,13 @@ class GoldSilverApp(App[None]):
             mom_fresh and rec_fresh and mom.action == "SELL" and rec.action == "SELL"
         )
         if "BUY" in actions:
-            panel.add_marker(tick.price, tick.time, (125, 255, 140), heavy=both_buy)
+            for panel in panels:
+                panel.add_marker(tick.price, tick.time, (125, 255, 140), heavy=both_buy)
         if "SELL" in actions:
-            panel.add_marker(tick.price, tick.time, (255, 107, 107), heavy=both_sell)
+            for panel in panels:
+                panel.add_marker(
+                    tick.price, tick.time, (255, 107, 107), heavy=both_sell
+                )
 
     async def _on_status(self, status: str) -> None:
         self._connection_status = status
@@ -629,12 +689,13 @@ class GoldSilverApp(App[None]):
             self._stocktwits_panel.mark_stale(since)
 
     def _mark_event_on_charts(self, color: tuple[int, int, int]) -> None:
-        for symbol, panel in self._panels.items():
+        for symbol in self._panels:
             last = self._last_price.get(symbol)
             if last is None:
                 continue
             price, ts = last
-            panel.add_marker(price, ts, color)
+            for panel in self._symbol_panels(symbol):
+                panel.add_marker(price, ts, color)
 
     def _refresh_status_bar(self) -> None:
         try:
@@ -666,6 +727,8 @@ class GoldSilverApp(App[None]):
         current = PlotSettings(
             timeframe_index=self._timeframe_index,
             chart_kind=self._chart_kind,
+            show_dual_charts=self._settings.show_dual_charts,
+            chart_kind2=self._settings.chart_kind2,
             show_sma=self._show_sma,
             show_vwap=self._show_vwap,
             show_day_refs=self._show_day_refs,
@@ -796,7 +859,7 @@ class GoldSilverApp(App[None]):
     def action_cycle_zoom(self) -> None:
         if self._chart_mode != "live":
             return
-        for panel in self._panels.values():
+        for panel in self._all_metal_panels():
             panel.cycle_chart_zoom()
         any_panel = next(iter(self._panels.values()), None)
         if any_panel is not None:
@@ -814,43 +877,43 @@ class GoldSilverApp(App[None]):
     def action_toggle_crosshair(self) -> None:
         if self._chart_mode != "live":
             return
-        for panel in self._panels.values():
+        for panel in self._all_metal_panels():
             panel.toggle_crosshair()
 
     def action_crosshair_left(self) -> None:
         if self._chart_mode != "live":
             return
-        for panel in self._panels.values():
+        for panel in self._all_metal_panels():
             panel.move_crosshair(-1)
 
     def action_crosshair_right(self) -> None:
         if self._chart_mode != "live":
             return
-        for panel in self._panels.values():
+        for panel in self._all_metal_panels():
             panel.move_crosshair(1)
 
     def action_crosshair_page_left(self) -> None:
         if self._chart_mode != "live":
             return
-        for panel in self._panels.values():
+        for panel in self._all_metal_panels():
             panel.move_crosshair(-60)
 
     def action_crosshair_page_right(self) -> None:
         if self._chart_mode != "live":
             return
-        for panel in self._panels.values():
+        for panel in self._all_metal_panels():
             panel.move_crosshair(60)
 
     def action_pin_current(self) -> None:
         if self._chart_mode != "live":
             return
-        for panel in self._panels.values():
+        for panel in self._all_metal_panels():
             panel.pin_current()
 
     def action_clear_pins(self) -> None:
         if self._chart_mode != "live":
             return
-        for panel in self._panels.values():
+        for panel in self._all_metal_panels():
             panel.clear_pins()
 
     def _persist_settings(self) -> None:
@@ -867,6 +930,8 @@ class GoldSilverApp(App[None]):
             or settings.show_vwap != self._show_vwap
             or settings.show_day_refs != self._show_day_refs
         )
+        dual_changed = settings.show_dual_charts != self._settings.show_dual_charts
+        kind2_changed = settings.chart_kind2 != self._settings.chart_kind2
         news_changed = (
             settings.show_news_markets != self._settings.show_news_markets
             or settings.show_news_trump != self._settings.show_news_trump
@@ -900,6 +965,8 @@ class GoldSilverApp(App[None]):
         self._show_day_refs = settings.show_day_refs
         self._settings.timeframe_index = settings.timeframe_index
         self._settings.chart_kind = settings.chart_kind
+        self._settings.show_dual_charts = settings.show_dual_charts
+        self._settings.chart_kind2 = settings.chart_kind2
         self._settings.show_sma = settings.show_sma
         self._settings.show_vwap = settings.show_vwap
         self._settings.show_day_refs = settings.show_day_refs
@@ -930,10 +997,12 @@ class GoldSilverApp(App[None]):
             self._insider_panel.display = self._settings.show_insider_trades
         if stocktwits_changed and self._stocktwits_panel is not None:
             self._stocktwits_panel.display = self._settings.show_stocktwits
-        if gold_changed and GOLD in self._panels:
-            self._panels[GOLD].set_accent(self._settings.gold_rgb())
-        if silver_changed and SILVER in self._panels:
-            self._panels[SILVER].set_accent(self._settings.silver_rgb())
+        if gold_changed:
+            for panel in (self._panels[GOLD], self._dup_panels[GOLD]):
+                panel.set_accent(self._settings.gold_rgb())
+        if silver_changed:
+            for panel in (self._panels[SILVER], self._dup_panels[SILVER]):
+                panel.set_accent(self._settings.silver_rgb())
         if columns_changed:
             self._apply_metals_columns()
         if visible_changed:
@@ -958,18 +1027,25 @@ class GoldSilverApp(App[None]):
                 self._settings.show_stock_row and self._settings.stock_tickers
             )
 
+        if dual_changed:
+            for panel in self._dup_panels.values():
+                panel.display = self._settings.show_dual_charts
+
         if timeframe_changed:
             self._refresh_status_bar()
             self._seed_all()
             return
-        if feature_changed:
-            for panel in self._panels.values():
-                panel.apply_chart_features(
-                    chart_kind=self._chart_kind,
-                    show_sma=self._show_sma,
-                    show_vwap=self._show_vwap,
-                    show_day_refs=self._show_day_refs,
-                )
+        if dual_changed and self._settings.show_dual_charts:
+            self._seed_all()
+        elif feature_changed or kind2_changed:
+            for symbol in self._panels:
+                for panel, kind in self._symbol_panels_with_kind(symbol):
+                    panel.apply_chart_features(
+                        chart_kind=kind,
+                        show_sma=self._show_sma,
+                        show_vwap=self._show_vwap,
+                        show_day_refs=self._show_day_refs,
+                    )
         if markers_changed:
             self._seed_all()
 
@@ -987,7 +1063,7 @@ class GoldSilverApp(App[None]):
             for n in (s.name for s in self._strategies)
             if self._settings.visible_signals.get(n, False)
         ]
-        for panel in self._panels.values():
+        for panel in self._all_metal_panels():
             panel.set_visible_signals(names)
 
 

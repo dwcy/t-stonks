@@ -118,6 +118,8 @@ class AppSettings:
     chart_kind: ChartKind = "line"
     chart_zoom: ChartZoom = "24h"
     chart_mode: ChartMode = "live"
+    show_dual_charts: bool = False
+    chart_kind2: ChartKind = "candle"
     show_sma: bool = False
     show_vwap: bool = False
     show_day_refs: bool = False
@@ -148,6 +150,11 @@ class AppSettings:
             self.chart_zoom = "24h"
         if self.chart_mode not in CHART_MODE_CHOICES:
             self.chart_mode = "live"
+        if self.chart_kind not in ("line", "candle"):
+            self.chart_kind = "line"
+        if self.chart_kind2 not in ("line", "candle"):
+            self.chart_kind2 = "candle"
+        self.show_dual_charts = bool(self.show_dual_charts)
         if not isinstance(self.stock_tickers, list):
             self.stock_tickers = _default_stock_tickers()
         else:

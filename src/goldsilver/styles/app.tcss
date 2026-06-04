@@ -26,7 +26,7 @@ Footer {
 }
 
 #metals.cards-1 {
-    grid-size: 1 2;
+    grid-size: 1;
 }
 
 #metals.cards-2 {

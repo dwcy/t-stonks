@@ -32,6 +32,8 @@ _MINI_TILE_LABEL: dict[str, str] = {
 class PlotSettings:
     timeframe_index: int
     chart_kind: ChartKind
+    show_dual_charts: bool
+    chart_kind2: ChartKind
     show_sma: bool
     show_vwap: bool
     show_day_refs: bool
@@ -100,6 +102,25 @@ class PlotSettingsScreen(ModalScreen[None]):
                         )
                         yield RadioButton(
                             "Candle", value=(self._state.chart_kind == "candle")
+                        )
+                with Vertical(classes="setting-group"):
+                    yield Label("Duplicate charts", classes="setting-label")
+                    with Horizontal(classes="switch-row"):
+                        yield Switch(
+                            value=self._state.show_dual_charts,
+                            id="setting-dual",
+                        )
+                        yield Label(
+                            "Add a 2nd Gold/Silver chart",
+                            classes="switch-label",
+                        )
+                    yield Label("2nd chart kind", classes="sub-label")
+                    with RadioSet(id="setting-kind2"):
+                        yield RadioButton(
+                            "Line", value=(self._state.chart_kind2 == "line")
+                        )
+                        yield RadioButton(
+                            "Candle", value=(self._state.chart_kind2 == "candle")
                         )
                 with Vertical(classes="setting-group"):
                     yield Label("Overlays", classes="setting-label")
@@ -313,6 +334,11 @@ class PlotSettingsScreen(ModalScreen[None]):
             if kind != self._state.chart_kind:
                 self._state.chart_kind = kind
                 self._emit()
+        elif rs_id == "setting-kind2":
+            kind2: ChartKind = "line" if idx == 0 else "candle"
+            if kind2 != self._state.chart_kind2:
+                self._state.chart_kind2 = kind2
+                self._emit()
         elif rs_id == "setting-marker-momentum":
             name = self._momentum_names[idx]
             if name != self._state.marker_momentum_strategy:
@@ -327,7 +353,10 @@ class PlotSettingsScreen(ModalScreen[None]):
     def on_switch_changed(self, event: Switch.Changed) -> None:
         sw_id = event.switch.id or ""
         v = event.value
-        if sw_id == "setting-sma" and v != self._state.show_sma:
+        if sw_id == "setting-dual" and v != self._state.show_dual_charts:
+            self._state.show_dual_charts = v
+            self._emit()
+        elif sw_id == "setting-sma" and v != self._state.show_sma:
             self._state.show_sma = v
             self._emit()
         elif sw_id == "setting-vwap" and v != self._state.show_vwap:
