@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Literal
@@ -85,6 +86,10 @@ class PriceChart(PlotextPlot):
         span = (self._bars[-1].time - origin).total_seconds() / 60.0
         if self._now_offset(origin) - span > STALE_SLIDE_MIN:
             self._redraw()
+
+    def _candle_target(self) -> int:
+        cols = self.content_size.width or self.size.width or 80
+        return max(20, cols - 8)
 
     @staticmethod
     def _now_offset(origin: datetime) -> float:
@@ -325,13 +330,14 @@ class PriceChart(PlotextPlot):
         v_closes = closes[i_start:i_end]
 
         if self._kind == "candle" and v_bars:
+            c_xs, c_bars = _downsample_candles(v_xs, v_bars, self._candle_target())
             self.plt.candlestick(
-                v_xs,
+                c_xs,
                 {
-                    "Open": [b.open for b in v_bars],
-                    "High": [b.high for b in v_bars],
-                    "Low": [b.low for b in v_bars],
-                    "Close": v_closes,
+                    "Open": [b.open for b in c_bars],
+                    "High": [b.high for b in c_bars],
+                    "Low": [b.low for b in c_bars],
+                    "Close": [b.close for b in c_bars],
                 },
                 colors=[UP_COLOR, DOWN_COLOR],
             )
@@ -564,6 +570,32 @@ def _visible_slice(xs: list[float], xmin: float, xmax: float) -> tuple[int, int]
     if i_end < len(xs):
         i_end += 1
     return i_start, i_end
+
+
+def _downsample_candles(
+    xs: list[float], bars: list[Bar], target: int
+) -> tuple[list[float], list[Bar]]:
+    n = len(bars)
+    if target <= 0 or n <= target:
+        return xs, bars
+    step = math.ceil(n / target)
+    out_x: list[float] = []
+    out_bars: list[Bar] = []
+    for i in range(0, n, step):
+        chunk = bars[i : i + step]
+        out_x.append(xs[i])
+        out_bars.append(
+            Bar(
+                symbol=chunk[0].symbol,
+                time=chunk[0].time,
+                open=chunk[0].open,
+                high=max(b.high for b in chunk),
+                low=min(b.low for b in chunk),
+                close=chunk[-1].close,
+                volume=sum(b.volume for b in chunk),
+            )
+        )
+    return out_x, out_bars
 
 
 def _live_bar(symbol: str, time: datetime, price: float, prev: Bar) -> Bar:
