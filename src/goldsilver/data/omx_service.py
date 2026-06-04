@@ -76,12 +76,9 @@ class OmxService:
     async def _fetch(self) -> OmxSnapshot | None:
         def _sync() -> OmxSnapshot | None:
             try:
-                daily = yf.Ticker(OMX_SYMBOL).history(
-                    period="1y", interval="1d"
-                )
-                intraday = yf.Ticker(OMX_SYMBOL).history(
-                    period="1d", interval="5m"
-                )
+                ticker = yf.Ticker(OMX_SYMBOL)
+                daily = ticker.history(period="1y", interval="1d")
+                intraday = ticker.history(period="1d", interval="5m")
             except Exception:
                 return None
             if daily is None or len(daily) < HISTORY_DAYS + 2:
@@ -100,20 +97,34 @@ class OmxService:
                     OmxDay(date=dates[i], close=closes[i], change_percent=pct)
                 )
 
-            now_stk_date = datetime.now(STOCKHOLM).date()
+            fast_price: float | None = None
+            fast_prev_close: float | None = None
+            try:
+                fi = ticker.fast_info
+                fp = fi.last_price
+                fpc = fi.previous_close
+                if fp is not None and fp > 0:
+                    fast_price = float(fp)
+                if fpc is not None and fpc > 0:
+                    fast_prev_close = float(fpc)
+            except Exception:
+                pass
+
             if intraday is not None and len(intraday) > 0:
-                current_price = float(intraday["Close"].iloc[-1])
+                intraday_price = float(intraday["Close"].iloc[-1])
                 latest_ts = intraday.index[-1].to_pydatetime()
             else:
-                current_price = closes[-1]
-                latest_ts = datetime.combine(
-                    dates[-1], time(17, 30), tzinfo=STOCKHOLM
-                )
+                intraday_price = closes[-1]
+                latest_ts = datetime.combine(dates[-1], time(17, 30), tzinfo=STOCKHOLM)
             if latest_ts.tzinfo is None:
                 latest_ts = latest_ts.replace(tzinfo=timezone.utc)
 
+            current_price = fast_price if fast_price is not None else intraday_price
+
             session_date = latest_ts.astimezone(STOCKHOLM).date()
-            if session_date == now_stk_date and session_date != dates[-1]:
+            if fast_prev_close is not None:
+                reference_close = fast_prev_close
+            elif session_date != dates[-1]:
                 reference_close = closes[-1]
             else:
                 reference_close = closes[-2]
@@ -135,8 +146,8 @@ class OmxService:
             ytd_ref_close: float | None = None
             for d, c in zip(dates, closes):
                 if d.year == current_year:
-                    ytd_ref_close = c
                     break
+                ytd_ref_close = c
             if ytd_ref_close is None:
                 ytd_ref_close = closes[0]
             ytd_change = (

@@ -42,6 +42,7 @@ class Trade:
     cash_delta: float
     realized_pnl: float
     reason: TradeReason
+    position_units: float = 0.0
     rule_snapshot: dict[str, object] = field(default_factory=dict)
     signals: dict[str, str] = field(default_factory=dict)
 
@@ -51,6 +52,14 @@ class DailyPnL:
     day: date
     realized_pnl: float
     end_cash: float
+
+
+@dataclass(slots=True)
+class DayHistory:
+    day: date
+    buys: int
+    sells: int
+    realized_pnl: float
 
 
 @dataclass(slots=True)
@@ -88,6 +97,7 @@ class SimulatorSummary:
     lifetime_pct: float
     positions: tuple[PositionSnapshot, ...]
     recent_trades: tuple[Trade, ...]
+    history: tuple[DayHistory, ...]
     sell_mode: SellMode
     sell_pct: float
     trigger_mode: TriggerMode

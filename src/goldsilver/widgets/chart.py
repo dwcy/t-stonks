@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Iterable, Literal
 
 from textual_plotext import PlotextPlot
@@ -17,6 +18,7 @@ ZOOM_MINUTES: dict[ChartZoom, int] = {"24h": 24 * 60, "3h": 3 * 60, "1h": 60}
 ZOOM_ORDER: tuple[ChartZoom, ...] = ("24h", "3h", "1h")
 BAR_RETENTION_HOURS = 25
 MAX_BARS = BAR_RETENTION_HOURS * 60  # 1500 @ 1-min bucket
+STALE_SLIDE_MIN = 2.0  # only slide window by wall-clock once the feed lags this long
 
 UP_COLOR = (125, 255, 140)
 DOWN_COLOR = (255, 107, 107)
@@ -62,9 +64,7 @@ class PriceChart(PlotextPlot):
         self._prev_close: float | None = None
         self._sess_high: float | None = None
         self._sess_low: float | None = None
-        self._markers: list[
-            tuple[datetime, float, tuple[int, int, int], bool]
-        ] = []
+        self._markers: list[tuple[datetime, float, tuple[int, int, int], bool]] = []
         self._view = ChartViewState()
 
     @property
@@ -77,6 +77,26 @@ class PriceChart(PlotextPlot):
 
     def on_mount(self) -> None:
         self._redraw()
+        self.set_interval(1.0, self._clock_tick)
+
+    def _clock_tick(self) -> None:
+        if self._view.mode != "live" or len(self._bars) < 2:
+            return
+        origin = self._bars[0].time
+        span = (self._bars[-1].time - origin).total_seconds() / 60.0
+        if self._now_offset(origin) - span > STALE_SLIDE_MIN:
+            self._redraw()
+
+    def _candle_target(self) -> int:
+        cols = self.content_size.width or self.size.width or 80
+        return max(20, cols - 8)
+
+    @staticmethod
+    def _now_offset(origin: datetime) -> float:
+        now = datetime.now(timezone.utc)
+        if origin.tzinfo is None:
+            now = now.replace(tzinfo=None)
+        return (now - origin).total_seconds() / 60.0
 
     def seed(
         self,
@@ -294,8 +314,12 @@ class PriceChart(PlotextPlot):
 
         if self._view.mode == "live":
             window = ZOOM_MINUTES[self._view.zoom]
-            xmin = max(0.0, span_minutes - window)
-            xmax = span_minutes
+            now_offset = self._now_offset(origin)
+            if now_offset - span_minutes > STALE_SLIDE_MIN:
+                xmax = now_offset
+            else:
+                xmax = span_minutes
+            xmin = max(0.0, xmax - window)
         else:
             xmin = 0.0
             xmax = span_minutes
@@ -306,18 +330,21 @@ class PriceChart(PlotextPlot):
         v_closes = closes[i_start:i_end]
 
         if self._kind == "candle" and v_bars:
+            c_xs, c_bars = _downsample_candles(v_xs, v_bars, self._candle_target())
             self.plt.candlestick(
-                v_xs,
+                c_xs,
                 {
-                    "Open": [b.open for b in v_bars],
-                    "High": [b.high for b in v_bars],
-                    "Low": [b.low for b in v_bars],
-                    "Close": v_closes,
+                    "Open": [b.open for b in c_bars],
+                    "High": [b.high for b in c_bars],
+                    "Low": [b.low for b in c_bars],
+                    "Close": [b.close for b in c_bars],
                 },
                 colors=[UP_COLOR, DOWN_COLOR],
             )
         elif v_xs:
-            self.plt.plot(v_xs, v_closes, color=self._color, marker="braille")
+            dots = self._view.mode == "live" and self._view.zoom == "24h"
+            draw = self.plt.scatter if dots else self.plt.plot
+            draw(v_xs, v_closes, color=self._color, marker="braille")
 
         if self._show_sma:
             for period, dim in ((20, 0.75), (50, 0.50)):
@@ -348,7 +375,7 @@ class PriceChart(PlotextPlot):
             if self._sess_low is not None:
                 self.plt.hline(self._sess_low, color=DOWN_COLOR)
 
-        if self._markers:
+        if self._markers and self._kind != "candle":
             visible_start = self._bars[0].time
             visible_end = self._bars[-1].time
             by_group: dict[
@@ -410,9 +437,7 @@ class PriceChart(PlotextPlot):
                         pin_xs.append(px)
                         pin_ys.append(self._bars[idx].close)
             if pin_xs:
-                self.plt.scatter(
-                    pin_xs, pin_ys, color=PIN_COLOR, marker="●"
-                )
+                self.plt.scatter(pin_xs, pin_ys, color=PIN_COLOR, marker="●")
 
         ticks, labels = self._compute_ticks(origin, xmin, xmax)
         if ticks:
@@ -486,8 +511,10 @@ class PriceChart(PlotextPlot):
                 step = 6 * 60.0
             else:
                 step = 24 * 60.0
-        else:
+        elif self._view.zoom == "1h":
             step = 60.0
+        else:
+            step = self._live_hour_step(span)
 
         first_offset = self._next_step_offset(origin_local, int(step))
         if first_offset < xmin:
@@ -507,6 +534,16 @@ class PriceChart(PlotextPlot):
                 labels.append(tick_time.strftime("%H"))
             x += step
         return ticks, labels
+
+    def _live_hour_step(self, span: float) -> float:
+        cols = self.content_size.width or self.size.width or 80
+        avail = max(20, cols - 10)
+        max_labels = max(2, avail // 5)
+        hours = span / 60.0
+        for mult in (1, 2, 3, 4, 6, 12):
+            if hours / mult <= max_labels:
+                return mult * 60.0
+        return 24 * 60.0
 
     @staticmethod
     def _next_step_offset(start_local: datetime, step_minutes: int) -> float:
@@ -533,6 +570,32 @@ def _visible_slice(xs: list[float], xmin: float, xmax: float) -> tuple[int, int]
     if i_end < len(xs):
         i_end += 1
     return i_start, i_end
+
+
+def _downsample_candles(
+    xs: list[float], bars: list[Bar], target: int
+) -> tuple[list[float], list[Bar]]:
+    n = len(bars)
+    if target <= 0 or n <= target:
+        return xs, bars
+    step = math.ceil(n / target)
+    out_x: list[float] = []
+    out_bars: list[Bar] = []
+    for i in range(0, n, step):
+        chunk = bars[i : i + step]
+        out_x.append(xs[i])
+        out_bars.append(
+            Bar(
+                symbol=chunk[0].symbol,
+                time=chunk[0].time,
+                open=chunk[0].open,
+                high=max(b.high for b in chunk),
+                low=min(b.low for b in chunk),
+                close=chunk[-1].close,
+                volume=sum(b.volume for b in chunk),
+            )
+        )
+    return out_x, out_bars
 
 
 def _live_bar(symbol: str, time: datetime, price: float, prev: Bar) -> Bar:

@@ -129,8 +129,10 @@ class CalendarPanel(Horizontal):
             if i > 0:
                 text.append("  ·  ", style="#5a5a6a")
             day_label = day.date.strftime("%a")
-            time_label = "--:--" if event.all_day else (
-                event.scheduled_time.astimezone(STOCKHOLM).strftime("%H:%M")
+            time_label = (
+                "--:--"
+                if event.all_day
+                else (event.scheduled_time.astimezone(STOCKHOLM).strftime("%H:%M"))
             )
             text.append(f"{day_label} {time_label} ", style="#c0c0d0")
             text.append(
@@ -154,38 +156,54 @@ class CalendarPanel(Horizontal):
     def _render_bucket(self, snapshot: CalendarSnapshot, bucket: str) -> Text:
         days = [d for d in snapshot.days if d.bucket == bucket and d.events]
         text = Text()
-        text.append(
-            f"{_BUCKET_HEADER[bucket]}\n", style=_BUCKET_HEADER_STYLE[bucket]
-        )
+        if bucket == "today":
+            header = f"Today ({self.now_stk.strftime('%a %d %b')})"
+        else:
+            header = _BUCKET_HEADER[bucket]
+        text.append(f"{header}\n", style=_BUCKET_HEADER_STYLE[bucket])
         if not days:
             text.append("  (no events)\n", style="#5a5a6a")
             return text
-        for i, day in enumerate(days):
-            if i > 0:
-                text.append("\n")
-            text.append(
-                f"{day.date.strftime('%a %d %b')}\n",
-                style=_DAY_LABEL_STYLE[bucket],
-            )
+        for day in days:
+            day_label = None if bucket == "today" else day.date.strftime("%a %d %b")
             for event in day.events:
-                self._render_event(text, bucket, event)
+                self._render_event(text, bucket, event, day_label=day_label)
         return text
 
-    def _render_event(self, text: Text, bucket: str, event: CalendarEvent) -> None:
-        time_label = "--:--" if event.all_day else (
-            event.scheduled_time.astimezone(STOCKHOLM).strftime("%H:%M")
+    def _render_event(
+        self,
+        text: Text,
+        bucket: str,
+        event: CalendarEvent,
+        day_label: str | None = None,
+    ) -> None:
+        time_label = (
+            "--:--"
+            if event.all_day
+            else (event.scheduled_time.astimezone(STOCKHOLM).strftime("%H:%M"))
         )
-        passed = bucket == "today" and not event.all_day and (
-            event.scheduled_time < self.now_stk.astimezone(event.scheduled_time.tzinfo)
+        passed = (
+            bucket == "today"
+            and not event.all_day
+            and (
+                event.scheduled_time
+                < self.now_stk.astimezone(event.scheduled_time.tzinfo)
+            )
         )
         base_style = _EVENT_STYLE[bucket]
         time_style = "dim " + base_style if passed else base_style
         title_style = ("dim " if passed else "") + base_style
         source_style = (
-            "dim " + _SOURCE_STYLE[event.source] if passed else _SOURCE_STYLE[event.source]
+            "dim " + _SOURCE_STYLE[event.source]
+            if passed
+            else _SOURCE_STYLE[event.source]
         )
 
-        text.append(f"  {time_label} ", style=time_style)
+        if day_label is not None:
+            text.append(f"  {day_label} ", style=_DAY_LABEL_STYLE[bucket])
+            text.append(f"{time_label} ", style=time_style)
+        else:
+            text.append(f"  {time_label} ", style=time_style)
         text.append(f"{event.source:<8} ", style=source_style)
         title = event.title if len(event.title) <= 40 else event.title[:37] + "..."
         text.append(f"{title}\n", style=title_style)

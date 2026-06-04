@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
@@ -15,44 +13,35 @@ from textual.widgets import (
     Label,
     RadioButton,
     RadioSet,
+    Select,
     Static,
     Switch,
+    TabbedContent,
+    TabPane,
 )
 
+from goldsilver.data.models import GOLD, SILVER
 from goldsilver.data.trade_models import SellMode, SimulatorSummary, TriggerMode
-
-if TYPE_CHECKING:
-    from goldsilver.app import GoldSilverApp
-
-
-_REASON_LABEL: dict[str, str] = {
-    "signal_buy": "buy sig",
-    "signal_sell": "sell sig",
-    "eod_liquidation": "EOD",
-    "manual_reset": "reset",
-}
-
-
-def _fmt_money(v: float) -> str:
-    sign = "-" if v < 0 else ""
-    return f"{sign}${abs(v):,.2f}"
-
-
-def _fmt_pct(v: float) -> str:
-    sign = "+" if v >= 0 else ""
-    return f"{sign}{v:.2f}%"
-
-
-def _pnl_color(v: float) -> str:
-    if v > 0.0001:
-        return "#7dff8c"
-    if v < -0.0001:
-        return "#ff6b6b"
-    return "#a0a0b0"
+from goldsilver.widgets.trade_backtest import (
+    compose_backtest_pane,
+    control_symbol,
+    fmt_money as _fmt_money,
+    fmt_pct as _fmt_pct,
+    pnl_color as _pnl_color,
+    refresh_day_options,
+    run_and_render,
+    trade_cells,
+)
 
 
 class TradeSimulatorScreen(ModalScreen[None]):
     BINDINGS = [("escape", "dismiss", "Close")]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._rendered_trade_ids: set[str] = set()
+        self._rendered_history_days: set[str] = set()
+        self._bt_rendered: dict[str, set[str]] = {GOLD: set(), SILVER: set()}
 
     def compose(self) -> ComposeResult:
         with Container(id="trade-sim-dialog"):
@@ -67,29 +56,55 @@ class TradeSimulatorScreen(ModalScreen[None]):
                     yield Static("", id="sim-pos-gold", classes="sim-pos")
                     yield Static("", id="sim-pos-silver", classes="sim-pos")
                 with Vertical(classes="sim-controls"):
-                    with Horizontal(classes="sim-row"):
+                    with Horizontal(classes="sim-row sim-header-row"):
+                        yield Label(
+                            "Enable simulator",
+                            classes="sim-header-cell sim-header-enable",
+                        )
+                        yield Label(
+                            "Sell mode", classes="sim-header-cell sim-header-sell-mode"
+                        )
+                        yield Label(
+                            "Sell %", classes="sim-header-cell sim-header-sell-pct"
+                        )
+                        yield Label(
+                            "Trigger", classes="sim-header-cell sim-header-trigger"
+                        )
+                    with Horizontal(classes="sim-row sim-sell-row"):
                         yield Switch(value=False, id="sim-enabled")
-                        yield Label("Enable simulator", classes="sim-label")
-                    with Horizontal(classes="sim-row"):
-                        yield Label("Sell mode", classes="sim-label-fixed")
                         with RadioSet(id="sim-sell-mode"):
                             yield RadioButton("Sell all", value=True)
                             yield RadioButton("Percent")
-                    with Horizontal(classes="sim-row"):
-                        yield Label("Sell %", classes="sim-label-fixed")
                         yield Input(
                             value="50", id="sim-sell-pct", classes="sim-pct-input"
                         )
-                    with Horizontal(classes="sim-row"):
-                        yield Label("Trigger", classes="sim-label-fixed")
                         with RadioSet(id="sim-trigger"):
                             yield RadioButton("Either", value=True)
                             yield RadioButton("Both")
-                table = DataTable(id="sim-trades", zebra_stripes=True)
-                table.add_columns(
-                    "time", "sym", "side", "units", "price", "P/L", "reason"
-                )
-                yield table
+                with TabbedContent(id="sim-tabs"):
+                    with TabPane("Recent", id="sim-tab-recent"):
+                        trades_table = DataTable(id="sim-trades", zebra_stripes=True)
+                        trades_table.add_columns(
+                            "Time",
+                            "Symbol",
+                            "Side",
+                            "Units",
+                            "Total units",
+                            "Price",
+                            "P/L",
+                            "Reason",
+                        )
+                        yield trades_table
+                    with TabPane("Trade Simulator History", id="sim-tab-history"):
+                        history_table = DataTable(id="sim-history", zebra_stripes=True)
+                        history_table.add_column("Date", key="date")
+                        history_table.add_column("Buys", key="buys")
+                        history_table.add_column("Sells", key="sells")
+                        history_table.add_column("Trades", key="trades")
+                        history_table.add_column("Realized P/L", key="pnl")
+                        yield history_table
+                    yield from compose_backtest_pane(GOLD, self.app._settings)
+                    yield from compose_backtest_pane(SILVER, self.app._settings)
             with Horizontal(id="trade-sim-footer"):
                 yield Button("Close", id="sim-close")
                 yield Button("Liquidate now", id="sim-liquidate", variant="warning")
@@ -98,6 +113,8 @@ class TradeSimulatorScreen(ModalScreen[None]):
     def on_mount(self) -> None:
         self._refresh()
         self.set_interval(1.0, self._refresh)
+        refresh_day_options(self, GOLD)
+        refresh_day_options(self, SILVER)
 
     def _refresh(self) -> None:
         svc = self._service()
@@ -147,10 +164,10 @@ class TradeSimulatorScreen(ModalScreen[None]):
                 (status_text, f"bold {status_color}"),
             ),
         )
-        gold_pos = next((p for p in s.positions if p.symbol == "GOLD"), None)
-        silver_pos = next((p for p in s.positions if p.symbol == "SILVER"), None)
-        self._set_static("sim-pos-gold", self._format_position("GOLD", gold_pos))
-        self._set_static("sim-pos-silver", self._format_position("SILVER", silver_pos))
+        gold_pos = next((p for p in s.positions if p.symbol == "XAU"), None)
+        silver_pos = next((p for p in s.positions if p.symbol == "XAG"), None)
+        self._set_static("sim-pos-gold", self._format_position("Gold", gold_pos))
+        self._set_static("sim-pos-silver", self._format_position("Silver", silver_pos))
         try:
             sw = self.query_one("#sim-enabled", Switch)
             if sw.value != s.enabled:
@@ -158,6 +175,7 @@ class TradeSimulatorScreen(ModalScreen[None]):
         except Exception:
             pass
         self._populate_trades(s)
+        self._populate_history(s)
 
     def _format_position(self, symbol: str, pos) -> Text:
         if pos is None or pos.units <= 0:
@@ -184,20 +202,49 @@ class TradeSimulatorScreen(ModalScreen[None]):
             table = self.query_one("#sim-trades", DataTable)
         except Exception:
             return
-        table.clear()
+        live_ids = {t.trade_id for t in s.recent_trades}
+        if not self._rendered_trade_ids.issubset(live_ids):
+            table.clear()
+            self._rendered_trade_ids.clear()
         for t in s.recent_trades:
-            local = t.ts_utc.astimezone()
-            reason = _REASON_LABEL.get(t.reason, t.reason)
-            pnl_str = _fmt_money(t.realized_pnl) if t.side == "SELL" else "-"
-            table.add_row(
-                local.strftime("%m-%d %H:%M"),
-                t.symbol,
-                t.side,
-                f"{t.units:.4f}",
-                f"${t.price:,.2f}",
-                pnl_str,
-                reason,
+            if t.trade_id in self._rendered_trade_ids:
+                continue
+            table.add_row(*trade_cells(t), key=t.trade_id)
+            self._rendered_trade_ids.add(t.trade_id)
+
+    def _populate_history(self, s: SimulatorSummary) -> None:
+        try:
+            table = self.query_one("#sim-history", DataTable)
+        except Exception:
+            return
+        live_keys = {h.day.isoformat() for h in s.history}
+        if not self._rendered_history_days.issubset(live_keys):
+            table.clear()
+            self._rendered_history_days.clear()
+        for h in s.history:
+            key = h.day.isoformat()
+            pnl_cell = Text(
+                _fmt_money(h.realized_pnl),
+                style=f"bold {_pnl_color(h.realized_pnl)}",
             )
+            if key in self._rendered_history_days:
+                try:
+                    table.update_cell(key, "buys", str(h.buys))
+                    table.update_cell(key, "sells", str(h.sells))
+                    table.update_cell(key, "trades", str(h.buys + h.sells))
+                    table.update_cell(key, "pnl", pnl_cell)
+                except Exception:
+                    pass
+                continue
+            table.add_row(
+                h.day.strftime("%Y-%m-%d"),
+                str(h.buys),
+                str(h.sells),
+                str(h.buys + h.sells),
+                pnl_cell,
+                key=key,
+            )
+            self._rendered_history_days.add(key)
 
     async def on_switch_changed(self, event: Switch.Changed) -> None:
         if event.switch.id == "sim-enabled":
@@ -213,7 +260,16 @@ class TradeSimulatorScreen(ModalScreen[None]):
             mode_t: TriggerMode = "either" if idx == 0 else "both"
             await self._service().update_settings(trigger_mode=mode_t)
 
+    async def on_select_changed(self, event: Select.Changed) -> None:
+        symbol = control_symbol(event.select.id)
+        if symbol is not None:
+            await run_and_render(self, symbol)
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
+        bt_symbol = control_symbol(event.input.id)
+        if bt_symbol is not None:
+            await run_and_render(self, bt_symbol)
+            return
         if event.input.id == "sim-sell-pct":
             try:
                 pct = float(event.value) / 100.0
@@ -223,7 +279,10 @@ class TradeSimulatorScreen(ModalScreen[None]):
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
-        if bid == "sim-close":
+        run_symbol = control_symbol(bid)
+        if run_symbol is not None:
+            await run_and_render(self, run_symbol)
+        elif bid == "sim-close":
             self.dismiss()
         elif bid == "sim-liquidate":
             last_prices = getattr(self.app, "_last_price", {})

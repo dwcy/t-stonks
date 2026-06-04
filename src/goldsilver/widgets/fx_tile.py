@@ -51,10 +51,10 @@ class FxTile(Static):
         color = "#7a7a8a" if flat else ("#7dff8c" if change > 0 else "#ff6b6b")
         sign = "" if change < 0 else ("+" if not flat else " ")
         line = Text.assemble(
-            (f"{label}  ", "#a0a0b0"),
-            (f"{rate.rate:.4f}  ", "bold #e0e0e8"),
-            (arrow, color),
-            (f" {sign}{pct:.2f}%", color),
+            (f"{arrow} ", color),
+            (f"{label} ", "#a0a0b0"),
+            (f"{rate.rate:.4f} ", "bold #e0e0e8"),
+            (f"{sign}{pct:.2f}%", color),
         )
         if self.stale_since is not None:
             local = self.stale_since.astimezone()

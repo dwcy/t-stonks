@@ -112,9 +112,9 @@ class StockTile(Vertical):
         color = "#7a7a8a" if flat else ("#7dff8c" if change > 0 else "#ff6b6b")
         sign = "+" if change >= 0 else ""
         text = Text.assemble(
-            (f"{quote.display_name:<8}", "bold #e0e0e8"),
-            (f"{quote.price:>9.2f} ", "#e0e0e8"),
-            (f"{quote.currency:<3} ", "dim #7a7a8a"),
+            (f"{quote.display_name} ", "bold #e0e0e8"),
+            (f"{quote.price:.2f} ", "#e0e0e8"),
+            (f"{quote.currency} ", "dim #7a7a8a"),
             (arrow, color),
             (f" {sign}{pct:.2f}%", color),
         )

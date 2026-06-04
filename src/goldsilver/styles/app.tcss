@@ -21,11 +21,12 @@ Footer {
 
 #metals {
     height: auto;
-    padding: 1 2 0 2;
+    padding: 1 0 0 0;
+    grid-gutter: 0 2;
 }
 
 #metals.cards-1 {
-    grid-size: 1 2;
+    grid-size: 1;
 }
 
 #metals.cards-2 {
@@ -45,7 +46,6 @@ MetalPanel {
     height: auto;
     border: round #2a2a3a;
     padding: 0 2 0 2;
-    margin: 0 1;
     background: #10101a;
 }
 
@@ -100,13 +100,20 @@ MetalPanel .signal-row {
     layout: horizontal;
     height: 1;
     padding: 0 2;
-    background: #14141c;
 }
 
 .fx-tile, .commodity-tile {
     width: 1fr;
     height: 1;
     content-align: left middle;
+    text-overflow: ellipsis;
+}
+
+.mini-sep {
+    width: 3;
+    height: 1;
+    content-align: center middle;
+    color: #5a5a6a;
 }
 
 CalendarPanel {
@@ -120,7 +127,6 @@ CalendarPanel {
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
     padding: 0 1;
-    margin: 0 2 0 2;
     background: #10101a;
 }
 
@@ -160,12 +166,10 @@ OmxStrip {
     padding: 0 2;
     background: #14141c;
     content-align: left middle;
-    margin: 0 2;
 }
 
 StockRow {
     height: 7;
-    margin: 0 2;
     padding: 0;
     grid-rows: 7;
     grid-gutter: 0 1;
@@ -183,12 +187,12 @@ StockTile {
     height: 7;
     border: round #2a2a3a;
     padding: 0 1;
-    background: #10101a;
 }
 
 StockTile > #stock-head {
     height: 1;
     color: #e0e0e8;
+    text-overflow: ellipsis;
 }
 
 NewsPanel {
@@ -200,7 +204,6 @@ NewsPanel {
     border-title-align: left;
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
-    margin: 0 2;
     padding: 0 1;
     background: #10101a;
 }
@@ -214,7 +217,6 @@ CongressPanel {
     border-title-align: left;
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
-    margin: 0 2;
     padding: 0 1;
     background: #10101a;
 }
@@ -228,7 +230,6 @@ InsiderPanel {
     border-title-align: left;
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
-    margin: 0 2;
     padding: 0 1;
     background: #10101a;
 }
@@ -242,7 +243,6 @@ StockTwitsPanel {
     border-title-align: left;
     border-subtitle-color: #7a7a8a;
     border-subtitle-align: right;
-    margin: 0 2;
     padding: 0 1;
     background: #10101a;
 }
@@ -356,7 +356,7 @@ TradeSimulatorScreen {
 
 #trade-sim-dialog {
     width: 100;
-    height: 36;
+    height: 42;
     padding: 1 2;
     background: #14141c;
     border: round #7dff8c;
@@ -415,14 +415,128 @@ TradeSimulatorScreen .sim-label-fixed {
     color: #a0a0b0;
 }
 
+TradeSimulatorScreen .sim-label-inline {
+    margin-left: 2;
+}
+
+TradeSimulatorScreen .sim-header-row {
+    height: 1;
+    align: left middle;
+    margin-bottom: 0;
+}
+
+TradeSimulatorScreen .sim-header-enable {
+    width: 20;
+}
+
+TradeSimulatorScreen .sim-header-cell {
+    height: 1;
+    color: #a0a0b0;
+    text-style: bold;
+    content-align: left middle;
+}
+
+TradeSimulatorScreen .sim-header-sell-mode {
+    width: 22;
+    padding: 0 1;
+}
+
+TradeSimulatorScreen .sim-header-sell-pct {
+    width: 12;
+}
+
+TradeSimulatorScreen .sim-header-trigger {
+    width: 18;
+    padding: 0 1;
+}
+
+TradeSimulatorScreen .sim-sell-row {
+    height: 3;
+    align: left middle;
+}
+
+TradeSimulatorScreen #sim-enabled {
+    margin-right: 10;
+}
+
+TradeSimulatorScreen #sim-sell-mode {
+    width: 22;
+    height: 3;
+    border: none;
+    padding: 0 1;
+    background: transparent;
+}
+
+TradeSimulatorScreen #sim-trigger {
+    width: 18;
+    height: 3;
+    border: none;
+    padding: 0 1;
+    background: transparent;
+}
+
 TradeSimulatorScreen .sim-pct-input {
     width: 12;
     height: 3;
 }
 
-TradeSimulatorScreen #sim-trades {
-    height: 12;
+TradeSimulatorScreen #sim-tabs {
+    height: 1fr;
+    min-height: 18;
     width: 100%;
+}
+
+TradeSimulatorScreen #sim-trades,
+TradeSimulatorScreen #sim-history,
+TradeSimulatorScreen #bt-trades-gold,
+TradeSimulatorScreen #bt-trades-silver {
+    height: 1fr;
+    min-height: 14;
+    width: 100%;
+}
+
+TradeSimulatorScreen .bt-controls {
+    height: auto;
+    width: 100%;
+    align: left middle;
+}
+
+TradeSimulatorScreen .bt-label {
+    width: auto;
+    height: 3;
+    content-align: left middle;
+    padding: 0 1;
+    color: #a0a0b0;
+}
+
+TradeSimulatorScreen .bt-day-select {
+    width: 24;
+    margin: 0 1 0 0;
+}
+
+TradeSimulatorScreen .bt-select {
+    width: 22;
+    margin: 0 1 0 0;
+}
+
+TradeSimulatorScreen .bt-select-sm {
+    width: 14;
+    margin: 0 1 0 0;
+}
+
+TradeSimulatorScreen .bt-pct-input {
+    width: 8;
+    margin: 0 1 0 0;
+}
+
+TradeSimulatorScreen .bt-controls Button {
+    width: 10;
+}
+
+TradeSimulatorScreen .bt-stats {
+    height: auto;
+    width: 100%;
+    padding: 1 0;
 }
 
 #trade-sim-footer {
