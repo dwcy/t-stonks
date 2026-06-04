@@ -491,8 +491,10 @@ class PriceChart(PlotextPlot):
                 step = 6 * 60.0
             else:
                 step = 24 * 60.0
-        else:
+        elif self._view.zoom == "1h":
             step = 60.0
+        else:
+            step = self._live_hour_step(span)
 
         first_offset = self._next_step_offset(origin_local, int(step))
         if first_offset < xmin:
@@ -512,6 +514,16 @@ class PriceChart(PlotextPlot):
                 labels.append(tick_time.strftime("%H"))
             x += step
         return ticks, labels
+
+    def _live_hour_step(self, span: float) -> float:
+        cols = self.content_size.width or self.size.width or 80
+        avail = max(20, cols - 10)
+        max_labels = max(2, avail // 5)
+        hours = span / 60.0
+        for mult in (1, 2, 3, 4, 6, 12):
+            if hours / mult <= max_labels:
+                return mult * 60.0
+        return 24 * 60.0
 
     @staticmethod
     def _next_step_offset(start_local: datetime, step_minutes: int) -> float:
