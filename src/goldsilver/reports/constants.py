@@ -21,7 +21,7 @@ KNOWN_TOOLS: Final[frozenset[str]] = frozenset(
 TEMPLATE_VERSION: Final[int] = 1
 
 DEFAULT_INTERVAL_MINUTES: Final[int] = 60
-DEFAULT_TIMEOUT_SECONDS: Final[int] = 600
+DEFAULT_TIMEOUT_SECONDS: Final[int] = 360
 DEFAULT_MAX_CONCURRENCY: Final[int] = 3
 DEFAULT_OUT_DIR: Final[str] = "reports"
 

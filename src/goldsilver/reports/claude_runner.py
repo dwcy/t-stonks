@@ -16,6 +16,7 @@ OUTPUT_FORMAT = "text"
 ALLOWED_TOOLS_FLAG = "--allowed-tools"
 
 _VERDICT_RE = re.compile(r"<!--\s*VERDICT:\s*(\{.*?\})\s*-->", re.DOTALL)
+_DOC_START_RE = re.compile(r"<!--\s*VERDICT:|<!doctype html|<html", re.IGNORECASE)
 
 
 @dataclass(slots=True)
@@ -40,6 +41,15 @@ def strip_fences(text: str) -> str:
         if stripped.endswith("```"):
             t = stripped[:-3]
     return t.strip()
+
+
+def extract_document(text: str) -> str:
+    """Strip fences and slice from the first doc marker, dropping any leading prose."""
+    t = strip_fences(text)
+    match = _DOC_START_RE.search(t)
+    if match:
+        return t[match.start() :].strip()
+    return t
 
 
 def parse_verdict(html: str) -> Verdict | None:
@@ -108,7 +118,7 @@ async def run_claude(
             error=f"claude exited {proc.returncode}: {tail}",
         )
 
-    html = strip_fences(stdout.decode("utf-8", "replace"))
+    html = extract_document(stdout.decode("utf-8", "replace"))
     return ClaudeResult(
         status=ReportStatus.SUCCESS,
         html=html,

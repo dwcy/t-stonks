@@ -66,6 +66,32 @@ def write_report(out_root: Path, run: ReportRun, html: str | None) -> ReportRun:
     return run
 
 
+def _remove_pair(html_file: Path) -> None:
+    html_file.unlink(missing_ok=True)
+    html_file.with_suffix(".json").unlink(missing_ok=True)
+    parent = html_file.parent
+    try:
+        if parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+    except OSError:
+        pass
+
+
+def prune_ticker(out_root: Path, ticker: str, keep_rel: str | None) -> None:
+    """Delete every report for this ticker except keep_rel (one report per ticker)."""
+    safe = safe_name(ticker)
+    keep = (out_root / keep_rel).resolve() if keep_rel else None
+    for html_file in out_root.glob(f"*/*-{safe}.html"):
+        if keep is not None and html_file.resolve() == keep:
+            continue
+        _remove_pair(html_file)
+
+
+def delete_report(out_root: Path, rel_html: str | None) -> None:
+    if rel_html:
+        _remove_pair(out_root / rel_html)
+
+
 def _load_runs(out_root: Path) -> list[ReportRun]:
     runs: list[ReportRun] = []
     for sidecar in out_root.glob("*/*.json"):

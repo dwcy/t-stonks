@@ -429,6 +429,23 @@ ReportWatchlistScreen .report-interval {
     width: 12;
 }
 
+ReportWatchlistScreen .report-config-row {
+    height: 3;
+    align: left middle;
+}
+
+ReportWatchlistScreen .report-cfg-label {
+    height: 3;
+    content-align: right middle;
+    color: #a0a0b0;
+    margin: 0 1 0 0;
+}
+
+ReportWatchlistScreen .report-cfg-input {
+    width: 9;
+    margin: 0 1 0 0;
+}
+
 ReportWatchlistScreen .report-ticker-row,
 ReportWatchlistScreen .report-recent-row {
     height: 3;

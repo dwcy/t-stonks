@@ -50,6 +50,7 @@ from goldsilver.data.signal_strategies import (
 )
 from goldsilver.data.history_service import HistoryService
 from goldsilver.data.service import POLL_INTERVAL_S
+from goldsilver.reports.html_writer import delete_report, write_index
 from goldsilver.reports.models import ReportRun
 from goldsilver.reports.report_service import ReportService
 from goldsilver.reports.scheduler import ReportScheduler
@@ -793,6 +794,7 @@ class GoldSilverApp(App[None]):
             on_generate=self._action_generate_reports,
             on_open=self._open_report,
             on_retry=self._retry_report,
+            on_delete=self._delete_report,
             recent=self._report_runs[:20],
             generating=sorted(self._report_service.in_flight()),
         )
@@ -854,10 +856,17 @@ class GoldSilverApp(App[None]):
         self.notify(f"Reports done: {ok}/{len(runs)}", timeout=5)
 
     def _on_report_done(self, run: ReportRun) -> None:
+        self._report_runs = [r for r in self._report_runs if r.ticker != run.ticker]
         self._report_runs.insert(0, run)
         del self._report_runs[50:]
         if self._report_screen is not None:
             self._report_screen.mark_done(run)
+
+    def _delete_report(self, run: ReportRun) -> None:
+        root = self._report_service.out_root()
+        delete_report(root, run.html_path)
+        self._report_runs = [r for r in self._report_runs if r is not run]
+        write_index(root)
 
     def _open_report(self, run: ReportRun) -> None:
         if not run.html_path:

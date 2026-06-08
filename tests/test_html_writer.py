@@ -6,7 +6,13 @@ from datetime import datetime
 from pathlib import Path
 
 from goldsilver.data.session import STOCKHOLM
-from goldsilver.reports.html_writer import is_valid_html, write_index, write_report
+from goldsilver.reports.html_writer import (
+    delete_report,
+    is_valid_html,
+    prune_ticker,
+    write_index,
+    write_report,
+)
 from goldsilver.reports.models import ReportRun, ReportStatus, Verdict
 
 _VERDICT = Verdict(
@@ -119,3 +125,30 @@ def test_index_grouping_and_order(tmp_path: Path) -> None:
 def test_index_empty_state(tmp_path: Path) -> None:
     index = write_index(tmp_path)
     assert "No reports generated yet" in index.read_text("utf-8")
+
+
+def test_prune_ticker_keeps_only_latest(tmp_path: Path) -> None:
+    old = write_report(
+        tmp_path, _run("XAU", hour=14, minute=0), "<!doctype html><html>old</html>"
+    )
+    new = write_report(
+        tmp_path, _run("XAU", hour=15, minute=0), "<!doctype html><html>new</html>"
+    )
+    prune_ticker(tmp_path, "XAU", new.html_path)
+    assert not (tmp_path / old.html_path).exists()
+    assert not (tmp_path / "2026-06-08" / "14-00-XAU.json").exists()
+    assert (tmp_path / new.html_path).exists()
+
+
+def test_prune_does_not_touch_other_tickers(tmp_path: Path) -> None:
+    write_report(tmp_path, _run("XAG", hour=14), "<!doctype html><html>s</html>")
+    new = write_report(tmp_path, _run("XAU", hour=15), "<!doctype html><html>g</html>")
+    prune_ticker(tmp_path, "XAU", new.html_path)
+    assert (tmp_path / "2026-06-08" / "14-00-XAG.html").exists()
+
+
+def test_delete_report_removes_pair(tmp_path: Path) -> None:
+    run = write_report(tmp_path, _run("NVDA", hour=16), "<!doctype html><html>n</html>")
+    delete_report(tmp_path, run.html_path)
+    assert not (tmp_path / run.html_path).exists()
+    assert not (tmp_path / "2026-06-08" / "16-00-NVDA.json").exists()

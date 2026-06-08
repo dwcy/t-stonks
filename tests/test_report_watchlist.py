@@ -31,6 +31,7 @@ def _make_screen(settings: ReportSettings, sink: dict):
         on_generate=lambda: sink.__setitem__("gen", sink.get("gen", 0) + 1),
         on_open=lambda run: sink.setdefault("opened", []).append(run),
         on_retry=lambda sym: sink.setdefault("retried", []).append(sym),
+        on_delete=lambda run: sink.setdefault("deleted", []).append(run),
     )
 
 
@@ -163,6 +164,30 @@ async def test_failed_run_shows_retry_and_fires_callback() -> None:
         assert len(app.screen.query("#retry-1")) == 0
         await _click(pilot, "#retry-0")
         assert sink.get("retried") == ["XAG"]
+
+
+async def test_delete_button_fires_callback_and_removes_row() -> None:
+    from goldsilver.data.session import STOCKHOLM
+    from goldsilver.reports.models import ReportRun, ReportStatus
+
+    run = ReportRun(
+        ticker="NVDA",
+        label="NVDA",
+        kind="stock",
+        started_at=datetime(2026, 6, 9, 14, 0, tzinfo=STOCKHOLM),
+        status=ReportStatus.SUCCESS,
+    )
+    settings = ReportSettings(report_tickers=[])
+    sink: dict = {}
+    app = _Host()
+    async with app.run_test(size=_SIZE) as pilot:
+        screen = _make_screen(settings, sink)
+        screen._recent = [run]
+        await app.push_screen(screen)
+        await pilot.pause()
+        await _click(pilot, "#del-0")
+        assert sink.get("deleted") == [run]
+        assert len(app.screen.query("#del-0")) == 0  # row gone
 
 
 async def test_timeout_input_updates_settings() -> None:

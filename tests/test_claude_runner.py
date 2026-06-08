@@ -8,6 +8,7 @@ import pytest
 
 from goldsilver.reports import claude_runner
 from goldsilver.reports.claude_runner import (
+    extract_document,
     parse_verdict,
     run_claude,
     strip_fences,
@@ -57,6 +58,26 @@ def test_strip_fences_bare_fence() -> None:
 
 def test_strip_fences_none() -> None:
     assert strip_fences("<html></html>") == "<html></html>"
+
+
+def test_extract_document_drops_leading_prose() -> None:
+    raw = (
+        "The file write wasn't permitted, so I'll output the document directly.\n\n"
+        "<!-- VERDICT: {} -->\n<!doctype html><html></html>"
+    )
+    doc = extract_document(raw)
+    assert doc.startswith("<!-- VERDICT")
+
+
+def test_extract_document_finds_doctype_after_prose() -> None:
+    raw = "Here is the report:\n<!doctype html><html>x</html>"
+    assert extract_document(raw).startswith("<!doctype html>")
+
+
+def test_extract_document_no_marker_returns_text() -> None:
+    assert extract_document("just an apology, no document") == (
+        "just an apology, no document"
+    )
 
 
 def test_parse_verdict_valid() -> None:

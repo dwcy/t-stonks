@@ -10,7 +10,7 @@ from pathlib import Path
 from goldsilver.data.session import STOCKHOLM, stockholm_now
 from goldsilver.data.settings import ReportSettings
 from goldsilver.reports.claude_runner import run_claude
-from goldsilver.reports.html_writer import write_index, write_report
+from goldsilver.reports.html_writer import prune_ticker, write_index, write_report
 from goldsilver.reports.models import (
     ReportRun,
     ReportStatus,
@@ -92,6 +92,8 @@ class ReportService:
             run.finished_at = finished
             run.duration_seconds = (finished - started).total_seconds()
             run = write_report(root, run, result.html)
+            if run.status is ReportStatus.SUCCESS:
+                prune_ticker(root, ticker.symbol, run.html_path)
             if self._on_run_complete is not None:
                 self._on_run_complete(run)
             return run

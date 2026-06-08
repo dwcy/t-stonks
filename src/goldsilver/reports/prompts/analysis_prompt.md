@@ -54,7 +54,7 @@ Given **{STOCKHOLM_TIME}** / phase **{SWEDISH_PHASE}**: Enter now / Wait / Scale
 
 ## Output format — STRICT
 
-Output **only** a complete, self-contained HTML5 document. No markdown, no code fences, no commentary before or after.
+Output **only** a complete, self-contained HTML5 document **as your text response**. Do **not** attempt to write, save, or create any file, and do not use any file-writing tool — just return the document as text. No markdown, no code fences, no preamble, no commentary before or after the document.
 
 - **Line 1 MUST be** an HTML comment carrying the machine-readable verdict, exactly:
   `<!-- VERDICT: {"intraday":"BUY|HOLD|SELL","swing":"BUY|HOLD|SELL","confidence":0-100,"swedish_phase":"{SWEDISH_PHASE}","us_state":"{US_MARKET_STATE}","usd_impact":"Positive|Neutral|Negative","gold_impact":"Positive|Neutral|Negative","news_impact":"Positive|Neutral|Negative","geopolitical_impact":"Positive|Neutral|Negative","top_reasons":["...","...","..."],"what_would_change":["..."]} -->`

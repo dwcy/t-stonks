@@ -27,6 +27,7 @@ class ReportWatchlistScreen(ModalScreen[None]):
         on_generate: Callable[[], None],
         on_open: Callable[[ReportRun], None],
         on_retry: Callable[[str], None],
+        on_delete: Callable[[ReportRun], None],
         recent: Sequence[ReportRun] = (),
         generating: Sequence[str] = (),
     ) -> None:
@@ -36,6 +37,7 @@ class ReportWatchlistScreen(ModalScreen[None]):
         self._on_generate = on_generate
         self._on_open = on_open
         self._on_retry = on_retry
+        self._on_delete = on_delete
         self._recent = list(recent)
         self._generating: list[str] = list(generating)
         self._spinner_frame = 0
@@ -48,26 +50,24 @@ class ReportWatchlistScreen(ModalScreen[None]):
                 with Horizontal(classes="report-switch-row"):
                     yield Switch(value=self._settings.enabled, id="report-enabled")
                     yield Label("Hourly automation", classes="report-switch-label")
-                with Horizontal(classes="report-switch-row"):
-                    yield Label("Interval (min)", classes="report-sub-label")
+                with Horizontal(classes="report-config-row"):
+                    yield Label("Interval m", classes="report-cfg-label")
                     yield Input(
                         value=str(self._settings.interval_minutes),
                         id="report-interval",
-                        classes="report-interval",
+                        classes="report-cfg-input",
                     )
-                with Horizontal(classes="report-switch-row"):
-                    yield Label("Timeout (sec)", classes="report-sub-label")
+                    yield Label("Timeout s", classes="report-cfg-label")
                     yield Input(
                         value=str(self._settings.timeout_seconds),
                         id="report-timeout",
-                        classes="report-interval",
+                        classes="report-cfg-input",
                     )
-                with Horizontal(classes="report-switch-row"):
-                    yield Label("Parallel runs", classes="report-sub-label")
+                    yield Label("Parallel", classes="report-cfg-label")
                     yield Input(
                         value=str(self._settings.max_concurrency),
                         id="report-concurrency",
-                        classes="report-interval",
+                        classes="report-cfg-input",
                     )
                 yield Label("Always analyzed", classes="report-section-label")
                 for sym in PINNED_METALS:
@@ -131,6 +131,7 @@ class ReportWatchlistScreen(ModalScreen[None]):
                     Button("retry", id=f"retry-{i}", classes="report-retry")
                 )
             children.append(Button("open", id=f"open-{i}", classes="report-open"))
+            children.append(Button("✕", id=f"del-{i}", classes="report-remove"))
             rows.append(Horizontal(*children, classes="report-recent-row"))
         return rows
 
@@ -184,11 +185,16 @@ class ReportWatchlistScreen(ModalScreen[None]):
     def mark_done(self, run: ReportRun) -> None:
         if run.ticker in self._generating:
             self._generating.remove(run.ticker)
+        self._recent = [r for r in self._recent if r.ticker != run.ticker]
         self._recent.insert(0, run)
         del self._recent[50:]
         self._refresh_recent()
         if not self._generating:
             self._stop_spinner()
+
+    def remove_run(self, run: ReportRun) -> None:
+        self._recent = [r for r in self._recent if r is not run]
+        self._refresh_recent()
 
     def clear_generating(self, symbols: Sequence[str] | None = None) -> None:
         if symbols is None:
@@ -287,3 +293,12 @@ class ReportWatchlistScreen(ModalScreen[None]):
                 return
             if 0 <= idx < len(self._recent):
                 self._on_retry(self._recent[idx].ticker)
+        elif bid.startswith("del-"):
+            try:
+                idx = int(bid[len("del-") :])
+            except ValueError:
+                return
+            if 0 <= idx < len(self._recent):
+                run = self._recent[idx]
+                self._on_delete(run)
+                self.remove_run(run)
