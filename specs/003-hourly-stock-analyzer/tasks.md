@@ -143,7 +143,7 @@ Single project — code under `src/goldsilver/`, tests under `tests/` at repo ro
 
 - [x] T030 [P] Cross-link the report engine from `README.md` and confirm `specs/003-hourly-stock-analyzer/quickstart.md` steps are accurate
 - [x] T031 Run `uv run pytest` (full suite green), `uv tree` (confirm zero new third-party deps — scheduling is stdlib), and audit new files against `python.md` LoC budgets
-- [~] T032 Manual `quickstart.md` validation end-to-end — headless live run validated (real `claude` CLI invocation, capture, file write, timeout handling all confirmed); in-UI generate/open is a manual check left to the user
+- [x] T032 `quickstart.md` validation — live headless run confirmed SUCCESS end-to-end (real `claude` CLI, valid HTML + verdict SELL/HOLD 62%, duration 275s, sidecar + index written); timeout path also confirmed. In-UI generate/open remains a quick manual check for the user.
 
 ---
 
