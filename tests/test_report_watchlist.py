@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from textual.app import App, ComposeResult
@@ -99,3 +100,45 @@ async def test_generate_button_fires_callback() -> None:
         await pilot.pause()
         await _click(pilot, "#report-generate")
         assert sink.get("gen", 0) == 1
+
+
+async def test_generating_spinner_rows_then_cleared() -> None:
+    from goldsilver.data.session import STOCKHOLM
+    from goldsilver.reports.models import ReportRun, ReportStatus
+
+    settings = ReportSettings(report_tickers=["NVDA"])
+    sink: dict = {}
+    app = _Host()
+    async with app.run_test(size=_SIZE) as pilot:
+        screen = _make_screen(settings, sink)
+        await app.push_screen(screen)
+        await pilot.pause()
+        screen.mark_generating(["XAU", "XAG"])
+        await pilot.pause()
+        assert len(app.screen.query("#spin-XAU")) == 1
+        assert len(app.screen.query("#spin-XAG")) == 1
+
+        run = ReportRun(
+            ticker="XAU",
+            label="Gold",
+            kind="metal",
+            started_at=datetime(2026, 6, 8, 14, 0, tzinfo=STOCKHOLM),
+            status=ReportStatus.SUCCESS,
+        )
+        screen.mark_done(run)
+        await pilot.pause()
+        assert len(app.screen.query("#spin-XAU")) == 0  # swapped to result
+        assert len(app.screen.query("#spin-XAG")) == 1  # still generating
+
+
+async def test_timeout_input_updates_settings() -> None:
+    settings = ReportSettings(report_tickers=[])
+    sink: dict = {}
+    app = _Host()
+    async with app.run_test(size=_SIZE) as pilot:
+        screen = _make_screen(settings, sink)
+        await app.push_screen(screen)
+        await pilot.pause()
+        app.screen.query_one("#report-timeout").value = "540"
+        await pilot.pause()
+        assert settings.timeout_seconds == 540

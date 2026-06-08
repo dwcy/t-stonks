@@ -13,6 +13,8 @@ from goldsilver.data.settings import ReportSettings
 from goldsilver.reports.constants import METAL_LABELS, PINNED_METALS, safe_name
 from goldsilver.reports.models import ReportRun, ReportStatus
 
+_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
 
 class ReportWatchlistScreen(ModalScreen[None]):
     BINDINGS = [("escape", "dismiss", "Close")]
@@ -25,6 +27,7 @@ class ReportWatchlistScreen(ModalScreen[None]):
         on_generate: Callable[[], None],
         on_open: Callable[[ReportRun], None],
         recent: Sequence[ReportRun] = (),
+        generating: Sequence[str] = (),
     ) -> None:
         super().__init__()
         self._settings = settings
@@ -32,6 +35,9 @@ class ReportWatchlistScreen(ModalScreen[None]):
         self._on_generate = on_generate
         self._on_open = on_open
         self._recent = list(recent)
+        self._generating: list[str] = list(generating)
+        self._spinner_frame = 0
+        self._spinner_timer = None
 
     def compose(self) -> ComposeResult:
         with Container(id="report-dialog"):
@@ -45,6 +51,20 @@ class ReportWatchlistScreen(ModalScreen[None]):
                     yield Input(
                         value=str(self._settings.interval_minutes),
                         id="report-interval",
+                        classes="report-interval",
+                    )
+                with Horizontal(classes="report-switch-row"):
+                    yield Label("Timeout (sec)", classes="report-sub-label")
+                    yield Input(
+                        value=str(self._settings.timeout_seconds),
+                        id="report-timeout",
+                        classes="report-interval",
+                    )
+                with Horizontal(classes="report-switch-row"):
+                    yield Label("Parallel runs", classes="report-sub-label")
+                    yield Input(
+                        value=str(self._settings.max_concurrency),
+                        id="report-concurrency",
                         classes="report-interval",
                     )
                 yield Label("Always analyzed", classes="report-section-label")
@@ -88,7 +108,16 @@ class ReportWatchlistScreen(ModalScreen[None]):
 
     def _build_recent_rows(self) -> list[Horizontal]:
         rows: list[Horizontal] = []
-        if not self._recent:
+        frame = _SPINNER_FRAMES[self._spinner_frame]
+        for sym in self._generating:
+            rows.append(
+                Horizontal(
+                    Label(frame, id=f"spin-{safe_name(sym)}", classes="report-spinner"),
+                    Label(f"{sym:<8}  generating…", classes="report-recent-label"),
+                    classes="report-recent-row",
+                )
+            )
+        if not self._generating and not self._recent:
             rows.append(Horizontal(Label("(none yet)", classes="report-empty")))
             return rows
         for i, run in enumerate(self._recent):
@@ -100,6 +129,61 @@ class ReportWatchlistScreen(ModalScreen[None]):
                 )
             )
         return rows
+
+    def on_mount(self) -> None:
+        if self._generating:
+            self._start_spinner()
+
+    def on_unmount(self) -> None:
+        self._stop_spinner()
+
+    def _start_spinner(self) -> None:
+        if self._spinner_timer is None:
+            self._spinner_timer = self.set_interval(0.12, self._tick_spinner)
+
+    def _stop_spinner(self) -> None:
+        if self._spinner_timer is not None:
+            self._spinner_timer.stop()
+            self._spinner_timer = None
+
+    def _tick_spinner(self) -> None:
+        self._spinner_frame = (self._spinner_frame + 1) % len(_SPINNER_FRAMES)
+        frame = _SPINNER_FRAMES[self._spinner_frame]
+        for sym in self._generating:
+            try:
+                self.query_one(f"#spin-{safe_name(sym)}", Label).update(frame)
+            except Exception:
+                pass
+
+    def _refresh_recent(self) -> None:
+        try:
+            container = self.query_one("#report-recent-list", Vertical)
+        except Exception:
+            return
+        container.remove_children()
+        container.mount(*self._build_recent_rows())
+
+    def mark_generating(self, symbols: Sequence[str]) -> None:
+        self._generating = list(symbols)
+        self._refresh_recent()
+        if self._generating:
+            self._start_spinner()
+
+    def mark_done(self, run: ReportRun) -> None:
+        if run.ticker in self._generating:
+            self._generating.remove(run.ticker)
+        self._recent.insert(0, run)
+        del self._recent[50:]
+        self._refresh_recent()
+        if not self._generating:
+            self._stop_spinner()
+
+    def clear_generating(self) -> None:
+        if not self._generating:
+            return
+        self._generating = []
+        self._stop_spinner()
+        self._refresh_recent()
 
     @staticmethod
     def _recent_label(run: ReportRun) -> str:
@@ -142,13 +226,19 @@ class ReportWatchlistScreen(ModalScreen[None]):
             event.input.value = ""
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id != "report-interval":
+        fields = {
+            "report-interval": "interval_minutes",
+            "report-timeout": "timeout_seconds",
+            "report-concurrency": "max_concurrency",
+        }
+        attr = fields.get(event.input.id or "")
+        if attr is None:
             return
         try:
-            minutes = int(event.value)
+            value = int(event.value)
         except ValueError:
             return
-        self._settings.interval_minutes = minutes
+        setattr(self._settings, attr, value)
         self._settings.__post_init__()
         self._on_change()
 

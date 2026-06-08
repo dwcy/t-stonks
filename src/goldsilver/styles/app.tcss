@@ -475,6 +475,13 @@ ReportWatchlistScreen .report-empty {
     color: #707080;
 }
 
+ReportWatchlistScreen .report-spinner {
+    width: 3;
+    height: 3;
+    content-align: center middle;
+    color: #ffd56b;
+}
+
 #report-actions {
     height: 3;
     margin-top: 1;

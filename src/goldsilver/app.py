@@ -212,6 +212,7 @@ class GoldSilverApp(App[None]):
         )
         self._report_runs: list[ReportRun] = []
         self._report_scheduler: ReportScheduler | None = None
+        self._report_screen: ReportWatchlistScreen | None = None
 
     @property
     def _timeframe_label(self) -> str:
@@ -786,15 +787,19 @@ class GoldSilverApp(App[None]):
         self.push_screen(TradeSimulatorScreen())
 
     def action_reports(self) -> None:
-        self.push_screen(
-            ReportWatchlistScreen(
-                self._settings.report,
-                on_change=self._on_report_settings_change,
-                on_generate=self._action_generate_reports,
-                on_open=self._open_report,
-                recent=self._report_runs[:20],
-            )
+        screen = ReportWatchlistScreen(
+            self._settings.report,
+            on_change=self._on_report_settings_change,
+            on_generate=self._action_generate_reports,
+            on_open=self._open_report,
+            recent=self._report_runs[:20],
+            generating=sorted(self._report_service.in_flight()),
         )
+        self._report_screen = screen
+        self.push_screen(screen, self._on_report_screen_closed)
+
+    def _on_report_screen_closed(self, _result: None) -> None:
+        self._report_screen = None
 
     def _on_report_settings_change(self) -> None:
         self._persist_settings()
@@ -820,6 +825,9 @@ class GoldSilverApp(App[None]):
         )
 
     def _action_generate_reports(self) -> None:
+        symbols = [t.symbol for t in self._report_service.effective_watchlist()]
+        if self._report_screen is not None:
+            self._report_screen.mark_generating(symbols)
         self.run_worker(
             self._generate_reports(),
             exclusive=False,
@@ -829,12 +837,16 @@ class GoldSilverApp(App[None]):
     async def _generate_reports(self) -> None:
         self.notify("Generating reports…", timeout=3)
         runs = await self._report_service.run_all()
+        if self._report_screen is not None:
+            self._report_screen.clear_generating()
         ok = sum(1 for r in runs if r.html_path)
         self.notify(f"Reports done: {ok}/{len(runs)}", timeout=5)
 
     def _on_report_done(self, run: ReportRun) -> None:
         self._report_runs.insert(0, run)
         del self._report_runs[50:]
+        if self._report_screen is not None:
+            self._report_screen.mark_done(run)
 
     def _open_report(self, run: ReportRun) -> None:
         if not run.html_path:

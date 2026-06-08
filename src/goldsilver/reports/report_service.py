@@ -36,6 +36,9 @@ class ReportService:
         self._claude_path = claude_path
         self._inflight: set[str] = set()
 
+    def in_flight(self) -> set[str]:
+        return set(self._inflight)
+
     def out_root(self) -> Path:
         return Path.cwd() / self._settings_provider().out_dir
 
