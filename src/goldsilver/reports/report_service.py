@@ -85,10 +85,10 @@ class ReportService:
             run.status = result.status
             run.verdict = result.verdict
             run.error = result.error
-            run = write_report(root, run, result.html)
             finished = stockholm_now().astimezone(STOCKHOLM)
             run.finished_at = finished
             run.duration_seconds = (finished - started).total_seconds()
+            run = write_report(root, run, result.html)
             if self._on_run_complete is not None:
                 self._on_run_complete(run)
             return run

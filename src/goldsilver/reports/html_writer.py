@@ -15,8 +15,14 @@ _DOC_PREFIXES = ("<!doctype html", "<html")
 def is_valid_html(payload: str | None) -> bool:
     if not payload:
         return False
-    head = payload.lstrip().lower()
-    return head.startswith(_DOC_PREFIXES)
+    head = payload.lstrip()
+    # Skip leading HTML comments (the report leads with the VERDICT comment).
+    while head.startswith("<!--"):
+        end = head.find("-->")
+        if end == -1:
+            return False
+        head = head[end + 3 :].lstrip()
+    return head.lower().startswith(_DOC_PREFIXES)
 
 
 def _rel_paths(run: ReportRun) -> tuple[str, str]:

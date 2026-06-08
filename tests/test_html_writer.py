@@ -51,6 +51,22 @@ def test_is_valid_html() -> None:
     assert not is_valid_html("")
 
 
+def test_is_valid_html_allows_leading_verdict_comment() -> None:
+    payload = (
+        '<!-- VERDICT: {"intraday":"BUY"} -->\n'
+        "<!doctype html><html><body>ok</body></html>"
+    )
+    assert is_valid_html(payload)
+
+
+def test_verdict_led_document_is_success(tmp_path: Path) -> None:
+    payload = '<!-- VERDICT: {"intraday":"BUY"} -->\n<!doctype html><html>ok</html>'
+    out = write_report(tmp_path, _run("XAU"), payload)
+    assert out.status is ReportStatus.SUCCESS
+    saved = (tmp_path / out.html_path).read_text("utf-8")
+    assert saved.startswith("<!-- VERDICT")
+
+
 def test_write_success_path_and_sidecar(tmp_path: Path) -> None:
     run = _run("XAU", verdict=_VERDICT)
     out = write_report(tmp_path, run, "<!doctype html><html><body>ok</body></html>")
