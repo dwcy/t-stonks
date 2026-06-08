@@ -461,6 +461,14 @@ ReportWatchlistScreen .report-open {
     height: 3;
 }
 
+ReportWatchlistScreen .report-retry {
+    min-width: 9;
+    width: 9;
+    height: 3;
+    margin: 0 1 0 0;
+    color: #ff9b6b;
+}
+
 ReportWatchlistScreen .report-add-row {
     height: 3;
     align: left middle;

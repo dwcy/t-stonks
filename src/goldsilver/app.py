@@ -792,6 +792,7 @@ class GoldSilverApp(App[None]):
             on_change=self._on_report_settings_change,
             on_generate=self._action_generate_reports,
             on_open=self._open_report,
+            on_retry=self._retry_report,
             recent=self._report_runs[:20],
             generating=sorted(self._report_service.in_flight()),
         )
@@ -825,20 +826,30 @@ class GoldSilverApp(App[None]):
         )
 
     def _action_generate_reports(self) -> None:
-        symbols = [t.symbol for t in self._report_service.effective_watchlist()]
+        self._run_reports(self._report_service.effective_watchlist(), replace=True)
+
+    def _retry_report(self, symbol: str) -> None:
+        tickers = self._report_service.resolve_tickers([symbol])
+        self._run_reports(tickers, replace=False)
+
+    def _run_reports(self, tickers: list, *, replace: bool) -> None:
+        symbols = [t.symbol for t in tickers]
         if self._report_screen is not None:
-            self._report_screen.mark_generating(symbols)
+            if replace:
+                self._report_screen.mark_generating(symbols)
+            else:
+                self._report_screen.add_generating(symbols)
         self.run_worker(
-            self._generate_reports(),
+            self._generate_reports(list(tickers), symbols),
             exclusive=False,
             group="report-generate",
         )
 
-    async def _generate_reports(self) -> None:
-        self.notify("Generating reports…", timeout=3)
-        runs = await self._report_service.run_all()
+    async def _generate_reports(self, tickers: list, symbols: list[str]) -> None:
+        self.notify(f"Generating {len(symbols)} report(s)…", timeout=3)
+        runs = await self._report_service.run_all(tickers)
         if self._report_screen is not None:
-            self._report_screen.clear_generating()
+            self._report_screen.clear_generating(symbols)
         ok = sum(1 for r in runs if r.html_path)
         self.notify(f"Reports done: {ok}/{len(runs)}", timeout=5)
 

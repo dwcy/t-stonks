@@ -30,6 +30,7 @@ def _make_screen(settings: ReportSettings, sink: dict):
         on_change=lambda: sink.__setitem__("changes", sink.get("changes", 0) + 1),
         on_generate=lambda: sink.__setitem__("gen", sink.get("gen", 0) + 1),
         on_open=lambda run: sink.setdefault("opened", []).append(run),
+        on_retry=lambda sym: sink.setdefault("retried", []).append(sym),
     )
 
 
@@ -129,6 +130,39 @@ async def test_generating_spinner_rows_then_cleared() -> None:
         await pilot.pause()
         assert len(app.screen.query("#spin-XAU")) == 0  # swapped to result
         assert len(app.screen.query("#spin-XAG")) == 1  # still generating
+
+
+async def test_failed_run_shows_retry_and_fires_callback() -> None:
+    from goldsilver.data.session import STOCKHOLM
+    from goldsilver.reports.models import ReportRun, ReportStatus
+
+    failed = ReportRun(
+        ticker="XAG",
+        label="Silver",
+        kind="metal",
+        started_at=datetime(2026, 6, 8, 14, 0, tzinfo=STOCKHOLM),
+        status=ReportStatus.TIMEOUT,
+    )
+    success = ReportRun(
+        ticker="XAU",
+        label="Gold",
+        kind="metal",
+        started_at=datetime(2026, 6, 8, 14, 0, tzinfo=STOCKHOLM),
+        status=ReportStatus.SUCCESS,
+    )
+    settings = ReportSettings(report_tickers=[])
+    sink: dict = {}
+    app = _Host()
+    async with app.run_test(size=_SIZE) as pilot:
+        screen = _make_screen(settings, sink)
+        screen._recent = [failed, success]
+        await app.push_screen(screen)
+        await pilot.pause()
+        # Failed run (index 0) has a retry button; the success run (index 1) does not.
+        assert len(app.screen.query("#retry-0")) == 1
+        assert len(app.screen.query("#retry-1")) == 0
+        await _click(pilot, "#retry-0")
+        assert sink.get("retried") == ["XAG"]
 
 
 async def test_timeout_input_updates_settings() -> None:

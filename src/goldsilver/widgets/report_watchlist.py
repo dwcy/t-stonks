@@ -26,6 +26,7 @@ class ReportWatchlistScreen(ModalScreen[None]):
         on_change: Callable[[], None],
         on_generate: Callable[[], None],
         on_open: Callable[[ReportRun], None],
+        on_retry: Callable[[str], None],
         recent: Sequence[ReportRun] = (),
         generating: Sequence[str] = (),
     ) -> None:
@@ -34,6 +35,7 @@ class ReportWatchlistScreen(ModalScreen[None]):
         self._on_change = on_change
         self._on_generate = on_generate
         self._on_open = on_open
+        self._on_retry = on_retry
         self._recent = list(recent)
         self._generating: list[str] = list(generating)
         self._spinner_frame = 0
@@ -121,13 +123,15 @@ class ReportWatchlistScreen(ModalScreen[None]):
             rows.append(Horizontal(Label("(none yet)", classes="report-empty")))
             return rows
         for i, run in enumerate(self._recent):
-            rows.append(
-                Horizontal(
-                    Label(self._recent_label(run), classes="report-recent-label"),
-                    Button("open", id=f"open-{i}", classes="report-open"),
-                    classes="report-recent-row",
+            children: list = [
+                Label(self._recent_label(run), classes="report-recent-label")
+            ]
+            if run.status is not ReportStatus.SUCCESS:
+                children.append(
+                    Button("retry", id=f"retry-{i}", classes="report-retry")
                 )
-            )
+            children.append(Button("open", id=f"open-{i}", classes="report-open"))
+            rows.append(Horizontal(*children, classes="report-recent-row"))
         return rows
 
     def on_mount(self) -> None:
@@ -169,6 +173,14 @@ class ReportWatchlistScreen(ModalScreen[None]):
         if self._generating:
             self._start_spinner()
 
+    def add_generating(self, symbols: Sequence[str]) -> None:
+        for sym in symbols:
+            if sym not in self._generating:
+                self._generating.append(sym)
+        self._refresh_recent()
+        if self._generating:
+            self._start_spinner()
+
     def mark_done(self, run: ReportRun) -> None:
         if run.ticker in self._generating:
             self._generating.remove(run.ticker)
@@ -178,11 +190,14 @@ class ReportWatchlistScreen(ModalScreen[None]):
         if not self._generating:
             self._stop_spinner()
 
-    def clear_generating(self) -> None:
+    def clear_generating(self, symbols: Sequence[str] | None = None) -> None:
+        if symbols is None:
+            self._generating = []
+        else:
+            drop = set(symbols)
+            self._generating = [s for s in self._generating if s not in drop]
         if not self._generating:
-            return
-        self._generating = []
-        self._stop_spinner()
+            self._stop_spinner()
         self._refresh_recent()
 
     @staticmethod
@@ -265,3 +280,10 @@ class ReportWatchlistScreen(ModalScreen[None]):
                 return
             if 0 <= idx < len(self._recent):
                 self._on_open(self._recent[idx])
+        elif bid.startswith("retry-"):
+            try:
+                idx = int(bid[len("retry-") :])
+            except ValueError:
+                return
+            if 0 <= idx < len(self._recent):
+                self._on_retry(self._recent[idx].ticker)
