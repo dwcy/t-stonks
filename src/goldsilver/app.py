@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sys
+import webbrowser
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import cast
 
 from rich.text import Text
@@ -48,6 +50,9 @@ from goldsilver.data.signal_strategies import (
 )
 from goldsilver.data.history_service import HistoryService
 from goldsilver.data.service import POLL_INTERVAL_S
+from goldsilver.reports.models import ReportRun
+from goldsilver.reports.report_service import ReportService
+from goldsilver.reports.scheduler import ReportScheduler
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
 from goldsilver.data.trades_service import TradesService
@@ -64,6 +69,7 @@ from goldsilver.widgets import (
     OmxStrip,
     PlotSettings,
     PlotSettingsScreen,
+    ReportWatchlistScreen,
     StockRow,
     StockTwitsPanel,
     TradeSimulatorScreen,
@@ -104,6 +110,7 @@ class GoldSilverApp(App[None]):
         Binding("q", "quit", "Quit"),
         Binding("p", "plot_settings", "Settings"),
         Binding("t", "trade_simulator", "Trade Sim"),
+        Binding("g", "reports", "Reports"),
         Binding("r", "refresh", "Refresh"),
         Binding("z", "cycle_zoom", "Zoom"),
         Binding("h", "cycle_chart_mode", "Mode"),
@@ -199,6 +206,12 @@ class GoldSilverApp(App[None]):
             settings_persister=self._persist_settings,
             on_enable_changed=self._on_simulator_enabled,
         )
+        self._report_service = ReportService(
+            lambda: self._settings.report,
+            on_run_complete=self._on_report_done,
+        )
+        self._report_runs: list[ReportRun] = []
+        self._report_scheduler: ReportScheduler | None = None
 
     @property
     def _timeframe_label(self) -> str:
@@ -326,8 +339,12 @@ class GoldSilverApp(App[None]):
         self._seed_all()
         if self._settings.simulator.enabled:
             self._start_simulator_replay()
+        if self._settings.report.enabled:
+            self._start_report_scheduler()
 
     async def on_unmount(self) -> None:
+        if self._report_scheduler is not None:
+            self._report_scheduler.request_stop()
         await self._service.stop()
         await self._history_service.stop()
         await self._calendar_service.stop()
@@ -767,6 +784,66 @@ class GoldSilverApp(App[None]):
 
     async def action_trade_simulator(self) -> None:
         self.push_screen(TradeSimulatorScreen())
+
+    def action_reports(self) -> None:
+        self.push_screen(
+            ReportWatchlistScreen(
+                self._settings.report,
+                on_change=self._on_report_settings_change,
+                on_generate=self._action_generate_reports,
+                on_open=self._open_report,
+                recent=self._report_runs[:20],
+            )
+        )
+
+    def _on_report_settings_change(self) -> None:
+        self._persist_settings()
+        if self._settings.report.enabled and self._report_scheduler is None:
+            self._start_report_scheduler()
+        elif not self._settings.report.enabled and self._report_scheduler is not None:
+            self._report_scheduler.request_stop()
+            self._report_scheduler = None
+
+    def _start_report_scheduler(self) -> None:
+        if self._report_scheduler is not None:
+            return
+        scheduler = ReportScheduler(
+            self._report_service,
+            enabled=lambda: self._settings.report.enabled,
+            interval_minutes=lambda: self._settings.report.interval_minutes,
+        )
+        self._report_scheduler = scheduler
+        self.run_worker(
+            scheduler.run_loop(),
+            exclusive=True,
+            group="report-scheduler",
+        )
+
+    def _action_generate_reports(self) -> None:
+        self.run_worker(
+            self._generate_reports(),
+            exclusive=False,
+            group="report-generate",
+        )
+
+    async def _generate_reports(self) -> None:
+        self.notify("Generating reports…", timeout=3)
+        runs = await self._report_service.run_all()
+        ok = sum(1 for r in runs if r.html_path)
+        self.notify(f"Reports done: {ok}/{len(runs)}", timeout=5)
+
+    def _on_report_done(self, run: ReportRun) -> None:
+        self._report_runs.insert(0, run)
+        del self._report_runs[50:]
+
+    def _open_report(self, run: ReportRun) -> None:
+        if not run.html_path:
+            return
+        path = self._report_service.out_root() / run.html_path
+        try:
+            webbrowser.open(path.resolve().as_uri())
+        except OSError:
+            self.notify("Could not open report", severity="error", timeout=5)
 
     async def _on_simulator_enabled(self) -> None:
         self._start_simulator_replay()

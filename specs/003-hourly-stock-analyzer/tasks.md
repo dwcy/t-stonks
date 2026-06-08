@@ -31,7 +31,7 @@ Single project — code under `src/goldsilver/`, tests under `tests/` at repo ro
 
 **Purpose**: package skeleton and artifact ignores.
 
-- [ ] T001 Create the report engine package: `src/goldsilver/reports/__init__.py` (module-intent docstring) and the `src/goldsilver/reports/prompts/` directory, per plan.md structure
+- [x] T001 Create the report engine package: `src/goldsilver/reports/__init__.py` (module-intent docstring) and the `src/goldsilver/reports/prompts/` directory, per plan.md structure
 - [x] T002 [P] Add generated `reports/` to `.gitignore` (already committed in `01b3067`)
 
 ---
@@ -42,11 +42,11 @@ Single project — code under `src/goldsilver/`, tests under `tests/` at repo ro
 
 **⚠️ CRITICAL**: no user story work begins until this phase is complete.
 
-- [ ] T003 [P] Create `src/goldsilver/reports/constants.py` — `PINNED_METALS = ("XAU","XAG")`, metal labels, `DEFAULT_ALLOWED_TOOLS`, `TEMPLATE_VERSION`, `DEFAULT_MAX_CONCURRENCY = 3`, and the `safe_name` symbol→filename rule (`/ . space :` → `-`)
-- [ ] T004 [P] Create `src/goldsilver/reports/models.py` — `ReportStatus`, `SwedishPhase`, `USMarketState` str-enums; `ReportTicker` dataclass (`symbol`, `label`, `pinned`, `kind`, `safe_name`); Pydantic v2 `Verdict` and `ReportRun` models (per data-model.md)
-- [ ] T005 [P] Implement `src/goldsilver/reports/phase.py` — pure `swedish_phase(dt)` and `us_market_state(dt)` taking a `Europe/Stockholm`-aware datetime, deriving US session edges from an `America/New_York` `zoneinfo` conversion (DST-correct); reuse `STOCKHOLM` from `data/session.py`
-- [ ] T006 Add nested `ReportSettings` dataclass to `src/goldsilver/data/settings.py` and a `report` field on `AppSettings` — fields `enabled`, `interval_minutes`, `report_tickers`, `timeout_seconds`, `max_concurrency`, `allowed_tools`, `out_dir` with `__post_init__` clamping/dedup (mirror `SimulatorSettings`); ensure `load`/`save` round-trip the nested dataclass
-- [ ] T007 [P] Unit test `tests/test_report_phase.py` — synthetic datetimes across every Swedish band and US-state band, including a US/EU DST-misalignment date, plus the `safe_name` mapping
+- [x] T003 [P] Create `src/goldsilver/reports/constants.py` — `PINNED_METALS = ("XAU","XAG")`, metal labels, `DEFAULT_ALLOWED_TOOLS`, `TEMPLATE_VERSION`, `DEFAULT_MAX_CONCURRENCY = 3`, and the `safe_name` symbol→filename rule (`/ . space :` → `-`)
+- [x] T004 [P] Create `src/goldsilver/reports/models.py` — `ReportStatus`, `SwedishPhase`, `USMarketState` str-enums; `ReportTicker` dataclass (`symbol`, `label`, `pinned`, `kind`, `safe_name`); Pydantic v2 `Verdict` and `ReportRun` models (per data-model.md)
+- [x] T005 [P] Implement `src/goldsilver/reports/phase.py` — pure `swedish_phase(dt)` and `us_market_state(dt)` taking a `Europe/Stockholm`-aware datetime, deriving US session edges from an `America/New_York` `zoneinfo` conversion (DST-correct); reuse `STOCKHOLM` from `data/session.py`
+- [x] T006 Add nested `ReportSettings` dataclass to `src/goldsilver/data/settings.py` and a `report` field on `AppSettings` — fields `enabled`, `interval_minutes`, `report_tickers`, `timeout_seconds`, `max_concurrency`, `allowed_tools`, `out_dir` with `__post_init__` clamping/dedup (mirror `SimulatorSettings`); ensure `load`/`save` round-trip the nested dataclass
+- [x] T007 [P] Unit test `tests/test_report_phase.py` — synthetic datetimes across every Swedish band and US-state band, including a US/EU DST-misalignment date, plus the `safe_name` mapping
 
 **Checkpoint**: shared types, settings, and clock logic ready.
 
@@ -60,13 +60,13 @@ Single project — code under `src/goldsilver/`, tests under `tests/` at repo ro
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Textual smoke test `tests/test_report_watchlist.py` — `App.run_test()` mounts the modal with ≥1 `pilot.pause()`; asserts pinned metals are present and non-removable, a valid ticker adds, blank/duplicate is dropped, and the change is written to `AppSettings.report.report_tickers`
+- [x] T008 [P] [US1] Textual smoke test `tests/test_report_watchlist.py` — `App.run_test()` mounts the modal with ≥1 `pilot.pause()`; asserts pinned metals are present and non-removable, a valid ticker adds, blank/duplicate is dropped, and the change is written to `AppSettings.report.report_tickers`
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Implement `src/goldsilver/widgets/report_watchlist.py` — a `ModalScreen` listing `report_tickers` plus pinned `PINNED_METALS` rows; add/remove inputs; reject removing pinned metals with a hint; dedup/blank-drop; save via `AppSettings.save()`. Helpers named by role (`_build_*`, `_collect_*`), never `_render*`/`_compose*` (python.md Textual rule)
-- [ ] T010 [US1] Bind a watchlist key (e.g. `R`) and `push_screen(ReportWatchlist())` in `src/goldsilver/app.py`; add the binding to the footer
-- [ ] T011 [P] [US1] Add modal styling for the watchlist screen in `src/goldsilver/styles/app.tcss`
+- [x] T009 [US1] Implement `src/goldsilver/widgets/report_watchlist.py` — a `ModalScreen` listing `report_tickers` plus pinned `PINNED_METALS` rows; add/remove inputs; reject removing pinned metals with a hint; dedup/blank-drop; save via `AppSettings.save()`. Helpers named by role (`_build_*`, `_collect_*`), never `_render*`/`_compose*` (python.md Textual rule)
+- [x] T010 [US1] Bind a watchlist key (e.g. `R`) and `push_screen(ReportWatchlist())` in `src/goldsilver/app.py`; add the binding to the footer
+- [x] T011 [P] [US1] Add modal styling for the watchlist screen in `src/goldsilver/styles/app.tcss`
 
 **Checkpoint**: watchlist is fully usable and persists, with no analysis engine yet.
 
@@ -80,19 +80,19 @@ Single project — code under `src/goldsilver/`, tests under `tests/` at repo ro
 
 ### Tests for User Story 2
 
-- [ ] T012 [P] [US2] Test `tests/test_prompt_builder.py` — every `{PLACEHOLDER}` is substituted (none left), the `<!-- TEMPLATE_VERSION -->` line is stripped before send, and literal `{`/`}` in CSS/JSON examples survive (no `.format()`)
-- [ ] T013 [P] [US2] Test `tests/test_claude_runner.py` — `claude` mocked: happy path returns stripped HTML + `SUCCESS`; ```` ```html ```` fences stripped; timeout → `TIMEOUT`; missing CLI (`which` → None) → `CLI_MISSING`; non-HTML output → `MALFORMED`; non-zero exit → `ERROR`
-- [ ] T014 [P] [US2] Test `tests/test_html_writer.py` — path scheme `reports/<date>/<HH-MM>-<SAFE_TICKER>.html`, `safe_name` cases (`LUG.ST`→`LUG-ST`), HTML-prefix guard (SUCCESS vs MALFORMED error shell), sidecar `.json` matches the `ReportRun`
+- [x] T012 [P] [US2] Test `tests/test_prompt_builder.py` — every `{PLACEHOLDER}` is substituted (none left), the `<!-- TEMPLATE_VERSION -->` line is stripped before send, and literal `{`/`}` in CSS/JSON examples survive (no `.format()`)
+- [x] T013 [P] [US2] Test `tests/test_claude_runner.py` — `claude` mocked: happy path returns stripped HTML + `SUCCESS`; ```` ```html ```` fences stripped; timeout → `TIMEOUT`; missing CLI (`which` → None) → `CLI_MISSING`; non-HTML output → `MALFORMED`; non-zero exit → `ERROR`
+- [x] T014 [P] [US2] Test `tests/test_html_writer.py` — path scheme `reports/<date>/<HH-MM>-<SAFE_TICKER>.html`, `safe_name` cases (`LUG.ST`→`LUG-ST`), HTML-prefix guard (SUCCESS vs MALFORMED error shell), sidecar `.json` matches the `ReportRun`
 
 ### Implementation for User Story 2
 
-- [ ] T015 [P] [US2] Author the prompt template `src/goldsilver/reports/prompts/analysis_prompt.md` exactly per `contracts/analysis-prompt.md` — `<!-- TEMPLATE_VERSION: 1 -->` line, all 7 placeholders, the Market-Reaction-Validation-first framework, correlation table, scenario probabilities, enhancements, and the fixed final-summary + line-1 `<!-- VERDICT: {json} -->` requirement
-- [ ] T016 [P] [US2] Implement `src/goldsilver/reports/prompt_builder.py` — `AnalysisPromptContext` dataclass + `build_prompt(context)`: load template, strip the version line, literal `str.replace` over the known placeholder set
-- [ ] T017 [US2] Implement `src/goldsilver/reports/claude_runner.py` — `shutil.which("claude")` (Windows `.cmd`), `asyncio.create_subprocess_exec` with `--output-format text --allowed-tools …`, `asyncio.wait_for(timeout)`, fence-strip, line-1 VERDICT parse → `Verdict|None`, map outcomes to `ReportStatus` (per claude-cli-invocation contract). Depends on T004
-- [ ] T018 [US2] Implement `src/goldsilver/reports/html_writer.py` — `write_report(run, html)`: HTML-prefix guard, write report HTML (or error shell on `MALFORMED`) + sidecar `ReportRun` JSON at the dated path (per report-file contract). Depends on T003, T004
-- [ ] T019 [US2] Implement `src/goldsilver/reports/report_service.py` — `run_one(ticker)` and `run_all(watchlist)`: build context (uses `phase.py`), `asyncio.gather` bounded by `asyncio.Semaphore(max_concurrency)` with `return_exceptions=True`, per-ticker no-overlap guard, collect `ReportRun`s. Depends on T016, T017, T018, T005
-- [ ] T020 [US2] Implement headless entrypoint `src/goldsilver/reports/__main__.py` — argparse `--all/--ticker/--once/--concurrency/--timeout/--out/--no-index/--json`, calls `report_service`, prints per-ticker lines or `--json`, exit codes 0/2/3/4 (per report-runner-cli contract). Depends on T019
-- [ ] T021 [US2] Add a "generate now" action in `src/goldsilver/app.py` (run `report_service.run_all` in a Textual worker), handle the run-result message, and open a finished report via `webbrowser.open(path.as_uri())`; surface each finished report as a clickable OSC-8 link / Enter-to-open row in the watchlist modal. Depends on T019, T009
+- [x] T015 [P] [US2] Author the prompt template `src/goldsilver/reports/prompts/analysis_prompt.md` exactly per `contracts/analysis-prompt.md` — `<!-- TEMPLATE_VERSION: 1 -->` line, all 7 placeholders, the Market-Reaction-Validation-first framework, correlation table, scenario probabilities, enhancements, and the fixed final-summary + line-1 `<!-- VERDICT: {json} -->` requirement
+- [x] T016 [P] [US2] Implement `src/goldsilver/reports/prompt_builder.py` — `AnalysisPromptContext` dataclass + `build_prompt(context)`: load template, strip the version line, literal `str.replace` over the known placeholder set
+- [x] T017 [US2] Implement `src/goldsilver/reports/claude_runner.py` — `shutil.which("claude")` (Windows `.cmd`), `asyncio.create_subprocess_exec` with `--output-format text --allowed-tools …`, `asyncio.wait_for(timeout)`, fence-strip, line-1 VERDICT parse → `Verdict|None`, map outcomes to `ReportStatus` (per claude-cli-invocation contract). Depends on T004
+- [x] T018 [US2] Implement `src/goldsilver/reports/html_writer.py` — `write_report(run, html)`: HTML-prefix guard, write report HTML (or error shell on `MALFORMED`) + sidecar `ReportRun` JSON at the dated path (per report-file contract). Depends on T003, T004
+- [x] T019 [US2] Implement `src/goldsilver/reports/report_service.py` — `run_one(ticker)` and `run_all(watchlist)`: build context (uses `phase.py`), `asyncio.gather` bounded by `asyncio.Semaphore(max_concurrency)` with `return_exceptions=True`, per-ticker no-overlap guard, collect `ReportRun`s. Depends on T016, T017, T018, T005
+- [x] T020 [US2] Implement headless entrypoint `src/goldsilver/reports/__main__.py` — argparse `--all/--ticker/--once/--concurrency/--timeout/--out/--no-index/--json`, calls `report_service`, prints per-ticker lines or `--json`, exit codes 0/2/3/4 (per report-runner-cli contract). Depends on T019
+- [x] T021 [US2] Add a "generate now" action in `src/goldsilver/app.py` (run `report_service.run_all` in a Textual worker), handle the run-result message, and open a finished report via `webbrowser.open(path.as_uri())`; surface each finished report as a clickable OSC-8 link / Enter-to-open row in the watchlist modal. Depends on T019, T009
 
 **Checkpoint**: on-demand reports generate in parallel and open from a link; the analysis framework already ships here.
 
@@ -104,8 +104,8 @@ Single project — code under `src/goldsilver/`, tests under `tests/` at repo ro
 
 **Independent Test**: inspect a generated report — each macro driver has an assumption-vs-actual line, broken correlations are flagged, and the line-1 VERDICT parses into the `Verdict` model.
 
-- [ ] T022 [P] [US5] Test `tests/test_analysis_framework.py` — assert `analysis_prompt.md` contains the "Market Reaction Validation — HIGHEST PRIORITY" section, the Correlation Validation table, scenario-probabilities-sum-to-100, and each enhancement heading; assert a sample line-1 `<!-- VERDICT: {…} -->` comment parses into a valid `Verdict`
-- [ ] T023 [US5] Harden verdict handling in `src/goldsilver/reports/claude_runner.py` + `html_writer.py` — tolerant parse (missing/invalid VERDICT → `verdict=None`, status stays `SUCCESS`), and ensure the saved report body keeps the color-coded verdict card; record `verdict`/`confidence` in the sidecar for downstream surfaces. Depends on T017, T018
+- [x] T022 [P] [US5] Test `tests/test_analysis_framework.py` — assert `analysis_prompt.md` contains the "Market Reaction Validation — HIGHEST PRIORITY" section, the Correlation Validation table, scenario-probabilities-sum-to-100, and each enhancement heading; assert a sample line-1 `<!-- VERDICT: {…} -->` comment parses into a valid `Verdict`
+- [x] T023 [US5] Harden verdict handling in `src/goldsilver/reports/claude_runner.py` + `html_writer.py` — tolerant parse (missing/invalid VERDICT → `verdict=None`, status stays `SUCCESS`), and ensure the saved report body keeps the color-coded verdict card; record `verdict`/`confidence` in the sidecar for downstream surfaces. Depends on T017, T018
 
 **Checkpoint**: report quality is enforced by tests and tolerant parsing.
 
@@ -117,9 +117,9 @@ Single project — code under `src/goldsilver/`, tests under `tests/` at repo ro
 
 **Independent Test**: set a short interval, leave the app running across two boundaries → two timestamped report sets appear unattended; toggling off stops runs.
 
-- [ ] T024 [US3] Implement `src/goldsilver/reports/scheduler.py` — `ReportScheduler`: compute delay to the next interval boundary in `Europe/Stockholm`, `asyncio` sleep-fire-repeat loop, cancellable on exit, skipping a boundary while a run is in flight (no backfill). Depends on T019
-- [ ] T025 [US3] Start the scheduler as a Textual worker when `settings.report.enabled` and add an enable + interval control to the watchlist modal in `src/goldsilver/app.py` / `src/goldsilver/widgets/report_watchlist.py`. Depends on T024, T009
-- [ ] T026 [P] [US3] Test `tests/test_scheduler.py` — next-boundary delay math at sample clock times; a boundary during an in-flight run is skipped; disabled → no run (subprocess layer mocked)
+- [x] T024 [US3] Implement `src/goldsilver/reports/scheduler.py` — `ReportScheduler`: compute delay to the next interval boundary in `Europe/Stockholm`, `asyncio` sleep-fire-repeat loop, cancellable on exit, skipping a boundary while a run is in flight (no backfill). Depends on T019
+- [x] T025 [US3] Start the scheduler as a Textual worker when `settings.report.enabled` and add an enable + interval control to the watchlist modal in `src/goldsilver/app.py` / `src/goldsilver/widgets/report_watchlist.py`. Depends on T024, T009
+- [x] T026 [P] [US3] Test `tests/test_scheduler.py` — next-boundary delay math at sample clock times; a boundary during an in-flight run is skipped; disabled → no run (subprocess layer mocked)
 
 **Checkpoint**: unattended hourly reports run while the app is open.
 
@@ -131,9 +131,9 @@ Single project — code under `src/goldsilver/`, tests under `tests/` at repo ro
 
 **Independent Test**: after runs across ≥2 dates, open `reports/index.html` → all reports linked, grouped by date newest-first.
 
-- [ ] T027 [US4] Add `write_index(out_dir)` to `src/goldsilver/reports/html_writer.py` — scan `reports/*/*.json`, group by date `<h2>` newest-first, color-coded verdict links, `—` for null verdict, status badge for failures, empty-state placeholder; call it once after `gather` settles in `report_service` and honor `--no-index`. Depends on T018, T019
-- [ ] T028 [P] [US4] Add a recent-reports list (last N runs from sidecars, with verdict/confidence) to `src/goldsilver/widgets/report_watchlist.py`. Depends on T009, T018
-- [ ] T029 [P] [US4] Test `tests/test_report_index.py` — date grouping/order, verdict badge + confidence, null verdict shows `—`, empty state when no reports
+- [x] T027 [US4] Add `write_index(out_dir)` to `src/goldsilver/reports/html_writer.py` — scan `reports/*/*.json`, group by date `<h2>` newest-first, color-coded verdict links, `—` for null verdict, status badge for failures, empty-state placeholder; call it once after `gather` settles in `report_service` and honor `--no-index`. Depends on T018, T019
+- [x] T028 [P] [US4] Add a recent-reports list (last N runs from sidecars, with verdict/confidence) to `src/goldsilver/widgets/report_watchlist.py`. Depends on T009, T018
+- [x] T029 [P] [US4] Test `tests/test_report_index.py` — date grouping/order, verdict badge + confidence, null verdict shows `—`, empty state when no reports
 
 **Checkpoint**: history is browsable in the browser and the TUI.
 
@@ -141,9 +141,9 @@ Single project — code under `src/goldsilver/`, tests under `tests/` at repo ro
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T030 [P] Cross-link the report engine from `README.md` and confirm `specs/003-hourly-stock-analyzer/quickstart.md` steps are accurate
-- [ ] T031 Run `uv run pytest` (full suite green), `uv tree` (confirm zero new third-party deps — scheduling is stdlib), and audit new files against `python.md` LoC budgets
-- [ ] T032 Manual `quickstart.md` validation end-to-end — add a ticker in the UI, generate, open the link, confirm `reports/` is git-ignored (no artifacts staged)
+- [x] T030 [P] Cross-link the report engine from `README.md` and confirm `specs/003-hourly-stock-analyzer/quickstart.md` steps are accurate
+- [x] T031 Run `uv run pytest` (full suite green), `uv tree` (confirm zero new third-party deps — scheduling is stdlib), and audit new files against `python.md` LoC budgets
+- [~] T032 Manual `quickstart.md` validation end-to-end — headless live run validated (real `claude` CLI invocation, capture, file write, timeout handling all confirmed); in-UI generate/open is a manual check left to the user
 
 ---
 

@@ -6,6 +6,18 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Literal
 
+from goldsilver.reports.constants import (
+    CONCURRENCY_BOUNDS,
+    DEFAULT_ALLOWED_TOOLS,
+    DEFAULT_INTERVAL_MINUTES,
+    DEFAULT_MAX_CONCURRENCY,
+    DEFAULT_OUT_DIR,
+    DEFAULT_TIMEOUT_SECONDS,
+    INTERVAL_BOUNDS,
+    KNOWN_TOOLS,
+    TIMEOUT_BOUNDS,
+)
+
 
 ChartKind = Literal["line", "candle"]
 ChartZoom = Literal["24h", "3h", "1h"]
@@ -99,6 +111,71 @@ class SimulatorSettings:
             self.trigger_mode = "either"
 
 
+def _default_report_tickers() -> list[str]:
+    return []
+
+
+def _default_allowed_tools() -> list[str]:
+    return list(DEFAULT_ALLOWED_TOOLS)
+
+
+def _clamp(value: int, bounds: tuple[int, int], fallback: int) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    lo, hi = bounds
+    if n < lo:
+        return lo
+    if n > hi:
+        return hi
+    return n
+
+
+@dataclass(slots=True)
+class ReportSettings:
+    enabled: bool = False
+    interval_minutes: int = DEFAULT_INTERVAL_MINUTES
+    report_tickers: list[str] = field(default_factory=_default_report_tickers)
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY
+    allowed_tools: list[str] = field(default_factory=_default_allowed_tools)
+    out_dir: str = DEFAULT_OUT_DIR
+
+    def __post_init__(self) -> None:
+        self.enabled = bool(self.enabled)
+        self.interval_minutes = _clamp(
+            self.interval_minutes, INTERVAL_BOUNDS, DEFAULT_INTERVAL_MINUTES
+        )
+        self.timeout_seconds = _clamp(
+            self.timeout_seconds, TIMEOUT_BOUNDS, DEFAULT_TIMEOUT_SECONDS
+        )
+        self.max_concurrency = _clamp(
+            self.max_concurrency, CONCURRENCY_BOUNDS, DEFAULT_MAX_CONCURRENCY
+        )
+        if not isinstance(self.report_tickers, list):
+            self.report_tickers = _default_report_tickers()
+        else:
+            cleaned: list[str] = []
+            seen: set[str] = set()
+            for raw in self.report_tickers:
+                if not isinstance(raw, str):
+                    continue
+                t = raw.strip().upper()
+                if not t or t in seen:
+                    continue
+                seen.add(t)
+                cleaned.append(t)
+            self.report_tickers = cleaned
+        if not isinstance(self.allowed_tools, list):
+            self.allowed_tools = _default_allowed_tools()
+        else:
+            tools = [t for t in self.allowed_tools if t in KNOWN_TOOLS]
+            self.allowed_tools = tools or _default_allowed_tools()
+        if not isinstance(self.out_dir, str) or not self.out_dir.strip():
+            self.out_dir = DEFAULT_OUT_DIR
+
+
 def _default_visible_signals() -> dict[str, bool]:
     from goldsilver.data.signal_strategies import (
         DEFAULT_VISIBLE,
@@ -142,6 +219,7 @@ class AppSettings:
     marker_momentum_strategy: str = ""
     marker_recoil_strategy: str = ""
     simulator: SimulatorSettings = field(default_factory=SimulatorSettings)
+    report: ReportSettings = field(default_factory=ReportSettings)
 
     def __post_init__(self) -> None:
         if self.metals_columns not in METALS_COLUMNS_CHOICES:
@@ -217,6 +295,18 @@ class AppSettings:
                     self.simulator = SimulatorSettings()
             else:
                 self.simulator = SimulatorSettings()
+        if not isinstance(self.report, ReportSettings):
+            if isinstance(self.report, dict):
+                allowed_report = {f.name for f in fields(ReportSettings)}
+                clean_report = {
+                    k: v for k, v in self.report.items() if k in allowed_report
+                }
+                try:
+                    self.report = ReportSettings(**clean_report)
+                except TypeError:
+                    self.report = ReportSettings()
+            else:
+                self.report = ReportSettings()
 
     @classmethod
     def load(cls) -> "AppSettings":
