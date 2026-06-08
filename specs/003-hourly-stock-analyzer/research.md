@@ -49,8 +49,9 @@ mitigated by a deterministic fence-strip in `claude_runner.py` and a "starts wit
 **Decision**: An in-app `asyncio` background task started as a Textual worker
 (`ReportScheduler`). It computes the delay to the next interval boundary (top of the
 hour by default), `await asyncio.sleep(delay)`, fires the run, repeats. A re-entrancy
-guard (an `asyncio.Lock` / "busy" flag per ticker) prevents overlap (FR-006). No missed
-hours are backfilled (FR + assumption). Also exposed headlessly via
+guard (an `asyncio.Lock` / "busy" flag per ticker) prevents overlap **of the same
+ticker** (FR-006); different tickers run concurrently (see D11). No missed hours are
+backfilled (FR + assumption). Also exposed headlessly via
 `python -m goldsilver.reports --once` for an external scheduler.
 
 **Rationale**:
@@ -269,3 +270,39 @@ the reactive/message pattern mandated by repo CLAUDE.md.
 - **Print a raw path**: works but not "clickable"; kept as the headless-mode output.
 - **Auto-open every report in the browser**: rejected — hourly auto-opening browser tabs
   is hostile; opening is user-initiated.
+
+---
+
+## D11 — Concurrency: run reports in parallel
+
+**Decision**: A run dispatches one `asyncio` task per ticker and awaits them with
+`asyncio.gather(*tasks, return_exceptions=True)`, bounded by an
+`asyncio.Semaphore(max_concurrency)` (default **3**, configurable via
+`ReportSettings.max_concurrency` and `--concurrency`; `1` = sequential). Each task owns
+its own `claude` subprocess and writes its own `<HH-MM>-<TICKER>.html` + sidecar. The
+`index.html` is regenerated **once** after all tasks settle, never from inside a task.
+
+**Rationale**:
+- The user wants multiple reports produced in parallel ("a task per report"). With the
+  full watchlist (2 metals + several stocks) sequential runs at ≤3 min each would push a
+  pass past 20–30 min; bounded parallelism brings a typical pass under the interval.
+- A semaphore caps how many `claude` processes hit the machine at once, so a large
+  watchlist can't fork-bomb a laptop. Default 3 is a safe middle ground; the user can
+  raise it.
+- `return_exceptions=True` keeps one ticker's failure from cancelling siblings (FR-018).
+- Per-ticker + per-minute filenames already guarantee collision-free concurrent writes
+  (D6); the only shared resource is `index.html`, written once at the end to avoid a
+  write race.
+
+**Re-entrancy interaction (FR-006)**: the per-ticker busy guard still prevents the *same*
+ticker from running twice at once (e.g. a manual "generate now" overlapping a scheduled
+tick). Concurrency is *across distinct tickers within one pass*, not duplicate runs of one
+ticker.
+
+**Alternatives considered**:
+- **Unbounded `gather`**: rejected — a 12-ticker watchlist would spawn 12 `claude`
+  processes simultaneously; memory/CPU/rate-limit risk on a personal machine.
+- **Sequential (original plan)**: rejected per user request — too slow for a full
+  watchlist within an hourly budget.
+- **Process pool / threads**: unnecessary — the work is I/O-bound subprocess waits;
+  `asyncio` + semaphore is the natural fit and stays on the existing event loop.

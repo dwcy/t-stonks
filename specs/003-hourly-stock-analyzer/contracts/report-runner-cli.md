@@ -18,17 +18,22 @@ python -m goldsilver.reports [--ticker SYM ... | --all] [--once] [--out DIR]
 | `--out DIR` | `settings.out_dir` (`reports`) | Output root, relative to repo root. |
 | `--timeout SECONDS` | `settings.timeout_seconds` (180) | Per-ticker CLI timeout. |
 | `--no-index` | off | Skip `index.html` regeneration. |
+| `--concurrency N` | `settings.max_concurrency` (3) | Max `claude` processes running at once. `1` = sequential. |
 | `--json` | off | Emit a machine-readable run summary to stdout (array of `ReportRun`). |
 
 ## Behavior
 
-- Resolves the effective watchlist, runs each ticker **sequentially** (avoid spawning N
-  concurrent `claude` processes on a personal machine; concurrency is a future knob).
+- Resolves the effective watchlist and runs the tickers **concurrently** — one async task
+  per report — bounded by an `asyncio.Semaphore(max_concurrency)` so at most N `claude`
+  processes run at once (default 3; `1` restores sequential). Dispatched via
+  `asyncio.gather(*tasks, return_exceptions=True)` so one failure never cancels the rest.
 - Each ticker writes `reports/<date>/<HH-MM>-<TICKER>.html` + sidecar `.json`
-  (report-file contract).
+  (report-file contract). Per-ticker + per-minute filenames make concurrent writes
+  collision-free.
 - A single ticker failure never aborts the batch (FR-018); its `ReportRun` records the
   failure status.
-- Regenerates `reports/index.html` at the end unless `--no-index`.
+- Regenerates `reports/index.html` **once**, after all tasks settle, unless `--no-index`
+  (avoids N concurrent index rewrites racing the same file).
 
 ## Output
 

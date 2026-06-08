@@ -189,6 +189,10 @@ verdict cites real reactions, not theory.
   arrives during an in-flight run MUST be skipped (no backfill of missed hours).
 - **FR-007**: System MUST let the user trigger a run on demand for the whole watchlist or
   a single instrument, independent of the schedule.
+- **FR-007a**: Within a single pass, System MUST analyze the watchlist instruments
+  **concurrently** (one task per report), bounded by a configurable max-concurrency
+  (default 3, `1` = sequential), so a full watchlist completes well inside the interval. A
+  single instrument's failure MUST NOT cancel the others.
 - **FR-008**: System MUST be runnable headlessly (one-shot, no TUI) for a single ticker
   or the full watchlist, so an external scheduler can drive it if desired.
 

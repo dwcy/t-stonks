@@ -102,7 +102,7 @@ output artifacts go in a repo-root `reports/` data folder (git-ignored).
 src/goldsilver/
 ├── app.py                         # MODIFIED: start ReportScheduler worker; bind watchlist key; route run-result messages
 ├── data/
-│   ├── settings.py                # MODIFIED: add nested ReportSettings (enabled, interval, report_tickers, timeout, allowed_tools, out_dir)
+│   ├── settings.py                # MODIFIED: add nested ReportSettings (enabled, interval, report_tickers, timeout, max_concurrency, allowed_tools, out_dir)
 │   ├── session.py                 # REUSED: Europe/Stockholm tz
 │   └── trading_hours.py           # REUSED/EXTENDED: derive Swedish session phase + US-market-state helpers
 ├── reports/                       # NEW subpackage — the report engine
@@ -111,7 +111,7 @@ src/goldsilver/
 │   ├── phase.py                   # Swedish session phase + US-market-state derivation (pure, testable)
 │   ├── prompt_builder.py          # load template, substitute AnalysisPromptContext
 │   ├── claude_runner.py           # async subprocess wrapper around `claude -p` (+ fence-strip)
-│   ├── report_service.py          # orchestrates: build prompt → run CLI → write file → status
+│   ├── report_service.py          # orchestrates: gather(Semaphore) per-ticker → build prompt → run CLI → write file → status
 │   ├── html_writer.py             # write report HTML + (re)generate reports/index.html
 │   ├── scheduler.py               # asyncio interval scheduler (on-the-hour alignment, no overlap)
 │   ├── prompts/

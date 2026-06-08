@@ -17,6 +17,7 @@ Persisted config controlling the engine.
 | `interval_minutes` | `int` | `60` | clamp to `[15, 1440]`; invalid → 60 |
 | `report_tickers` | `list[str]` | `[]` | strip, dedupe, drop blanks (same cleaner as `stock_tickers`); **stocks only** |
 | `timeout_seconds` | `int` | `180` | clamp to `[30, 900]`; invalid → 180 |
+| `max_concurrency` | `int` | `3` | clamp to `[1, 8]`; invalid → 3. `1` = sequential; caps simultaneous `claude` processes |
 | `allowed_tools` | `list[str]` | `["WebSearch", "WebFetch", "Read"]` | non-empty subset of a known tool allowlist; invalid entries dropped |
 | `out_dir` | `str` | `"reports"` | non-empty; resolved relative to repo root |
 
@@ -147,10 +148,11 @@ with time, ticker, color-coded verdict, and confidence.
 ```
 AppSettings 1───1 ReportSettings
 ReportSettings ──derives──> effective watchlist: [ReportTicker(metal, pinned)] + report_tickers
-ReportScheduler ──每 interval──> ReportService.run_all(watchlist)
-ReportService ──per ticker──> AnalysisPromptContext ──prompt_builder──> prompt string
-                          └──> claude_runner ──> raw HTML ──> html_writer ──> AnalysisReport(.html) + ReportRun(.json)
-html_writer ──aggregates all .json──> ReportIndex (index.html)
+ReportScheduler ──every interval──> ReportService.run_all(watchlist)
+ReportService ──gather(Semaphore(max_concurrency))──> one task per ticker
+   each task: AnalysisPromptContext ──prompt_builder──> prompt string
+              └──> claude_runner ──> raw HTML ──> html_writer ──> AnalysisReport(.html) + ReportRun(.json)
+html_writer ──aggregates all .json (once, after gather settles)──> ReportIndex (index.html)
 ReportRun.verdict 0/1 Verdict
 ```
 

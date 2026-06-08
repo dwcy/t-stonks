@@ -81,6 +81,7 @@ New `report` section under `AppSettings`:
   "interval_minutes": 60,
   "report_tickers": ["NVDA"],       // stocks; metals are pinned in code
   "timeout_seconds": 180,
+  "max_concurrency": 3,             // simultaneous claude processes; 1 = sequential
   "allowed_tools": ["WebSearch", "WebFetch", "Read"],
   "out_dir": "reports"
 }
