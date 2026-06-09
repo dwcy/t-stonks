@@ -368,7 +368,7 @@ ReportWatchlistScreen {
 }
 
 #report-dialog {
-    width: 60;
+    width: 66;
     height: 90%;
     padding: 1 2;
     background: #14141c;
