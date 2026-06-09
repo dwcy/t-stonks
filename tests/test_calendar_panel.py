@@ -20,6 +20,15 @@ class _Harness(App[None]):
         yield CalendarPanel()
 
 
+class _ClickHarness(App[None]):
+    def __init__(self) -> None:
+        super().__init__()
+        self.picked: list[CalendarEvent] = []
+
+    def compose(self) -> ComposeResult:
+        yield CalendarPanel(on_event_selected=self.picked.append)
+
+
 def _today_snapshot(*events: CalendarEvent) -> CalendarSnapshot:
     today = datetime.now(STOCKHOLM).date()
     days = [CalendarDay(date=today, bucket="today", events=tuple(events))]
@@ -58,20 +67,7 @@ async def test_today_high_event_renders_impact_tag() -> None:
 
 
 @pytest.mark.asyncio
-async def test_event_at_returns_rendered_event() -> None:
-    app = _Harness()
-    async with app.run_test() as pilot:
-        panel = app.query_one(CalendarPanel)
-        panel.apply_snapshot(_today_snapshot(_high_event()))
-        await pilot.pause()
-
-        assert panel.event_at(0) is not None
-        assert panel.event_at(0).title == "CPI (May)"
-        assert panel.event_at(9) is None
-
-
-@pytest.mark.asyncio
-async def test_event_row_carries_click_meta() -> None:
+async def test_event_row_keeps_source_color() -> None:
     app = _Harness()
     async with app.run_test() as pilot:
         panel = app.query_one(CalendarPanel)
@@ -79,12 +75,38 @@ async def test_event_row_carries_click_meta() -> None:
         await pilot.pause()
         rendered = app.query_one("#cal-today", Static).render()
 
-    clicks = [
-        getattr(span.style, "meta", {}).get("@click")
-        for span in rendered.spans
-        if not isinstance(span.style, str) and getattr(span.style, "meta", None)
-    ]
-    assert "app.show_calendar_event(0)" in clicks
+    styles = [repr(span.style) for span in rendered.spans]
+    # FED #7dcfff == (125, 207, 255) preserved, not flattened to the link color
+    assert any("125, 207, 255" in st for st in styles)
+
+
+class _StubClick:
+    def __init__(self, style: object) -> None:
+        self.style = style
+
+    def stop(self) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_clicking_event_row_selects_event() -> None:
+    app = _ClickHarness()
+    async with app.run_test() as pilot:
+        panel = app.query_one(CalendarPanel)
+        panel.apply_snapshot(_today_snapshot(_high_event()))
+        await pilot.pause()
+        body = app.query_one("#cal-today", Static)
+        rendered = body.render()
+        meta_style = next(
+            span.style
+            for span in rendered.spans
+            if not isinstance(span.style, str)
+            and span.style.meta.get("cal_event") is not None
+        )
+        body.on_click(_StubClick(meta_style))
+
+    assert len(app.picked) == 1
+    assert app.picked[0].title == "CPI (May)"
 
 
 @pytest.mark.asyncio

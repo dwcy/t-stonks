@@ -302,7 +302,7 @@ class GoldSilverApp(App[None]):
                 yield silver
                 yield gold2
                 yield silver2
-            calendar = CalendarPanel()
+            calendar = CalendarPanel(on_event_selected=self._show_calendar_event)
             self._calendar_panel = calendar
             yield calendar
             news = NewsPanel("Markets news")
@@ -580,12 +580,7 @@ class GoldSilverApp(App[None]):
         if self._calendar_panel is not None:
             self._calendar_panel.apply_snapshot(snapshot)
 
-    def action_show_calendar_event(self, index: int) -> None:
-        if self._calendar_panel is None:
-            return
-        event = self._calendar_panel.event_at(index)
-        if event is None:
-            return
+    def _show_calendar_event(self, event: CalendarEvent) -> None:
         screen = CalendarEventScreen(
             event,
             on_fetch=lambda: self._fetch_event_actuals(event),

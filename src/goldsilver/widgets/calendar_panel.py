@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 
 from rich.style import Style
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.reactive import reactive
@@ -14,6 +16,27 @@ from goldsilver.data.session import STOCKHOLM, stockholm_now
 
 
 COMPACT_MAX_EVENTS = 3
+
+
+class _CalendarBody(Static):
+    """A calendar text block that opens the event carried in the clicked span's meta."""
+
+    def __init__(
+        self,
+        renderable: object = "",
+        *,
+        on_pick: Callable[[CalendarEvent], None] | None = None,
+        **kwargs: object,
+    ) -> None:
+        super().__init__(renderable, **kwargs)  # type: ignore[arg-type]
+        self._on_pick = on_pick
+
+    def on_click(self, event: events.Click) -> None:
+        style = event.style
+        picked = style.meta.get("cal_event") if style is not None else None
+        if picked is not None and self._on_pick is not None:
+            self._on_pick(picked)
+            event.stop()
 
 
 _BUCKET_HEADER = {
@@ -57,25 +80,34 @@ class CalendarPanel(Horizontal):
     snapshot: reactive[CalendarSnapshot | None] = reactive(None)
     now_stk: reactive[datetime] = reactive(stockholm_now)
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        on_event_selected: Callable[[CalendarEvent], None] | None = None,
+    ) -> None:
         super().__init__()
         self.border_title = "Macro Calendar"
         self._compact: bool = False
-        self._event_index: list[CalendarEvent] = []
+        self._on_event_selected = on_event_selected
 
-    def event_at(self, index: int) -> CalendarEvent | None:
-        if 0 <= index < len(self._event_index):
-            return self._event_index[index]
-        return None
+    def _pick_event(self, event: CalendarEvent) -> None:
+        if self._on_event_selected is not None:
+            self._on_event_selected(event)
 
     def compose(self) -> ComposeResult:
         for bucket in ("today", "upcoming"):
             with VerticalScroll(classes=f"calendar-section -{bucket}"):
-                yield Static("loading…", id=f"cal-{bucket}", classes="calendar-body")
-        yield Static(
+                yield _CalendarBody(
+                    "loading…",
+                    id=f"cal-{bucket}",
+                    classes="calendar-body",
+                    on_pick=self._pick_event,
+                )
+        yield _CalendarBody(
             "loading…",
             id="cal-compact",
             classes="calendar-compact",
+            on_pick=self._pick_event,
         )
 
     def on_mount(self) -> None:
@@ -96,16 +128,15 @@ class CalendarPanel(Horizontal):
 
     def _refresh_body(self) -> None:
         snapshot = self.snapshot
-        self._event_index = []
         compact = snapshot is not None and self._is_today_empty(snapshot)
         self._apply_compact_layout(compact)
         if compact:
             assert snapshot is not None
-            body = self.query_one("#cal-compact", Static)
+            body = self.query_one("#cal-compact", _CalendarBody)
             body.update(self._render_compact(snapshot))
         else:
             for bucket in ("today", "upcoming"):
-                body = self.query_one(f"#cal-{bucket}", Static)
+                body = self.query_one(f"#cal-{bucket}", _CalendarBody)
                 if snapshot is None:
                     body.update(Text("loading…", style="#7a7a8a"))
                 else:
@@ -156,9 +187,7 @@ class CalendarPanel(Horizontal):
         for i, (day, event) in enumerate(upcoming_events):
             if i > 0:
                 text.append("  ·  ", style="#5a5a6a")
-            idx = len(self._event_index)
-            self._event_index.append(event)
-            row_start = len(text)
+            span_start = len(text)
             day_label = day.date.strftime("%a")
             time_label = (
                 "--:--"
@@ -174,7 +203,7 @@ class CalendarPanel(Horizontal):
             )
             title = event.title if len(event.title) <= 40 else event.title[:37] + "…"
             text.append(title, style="#e0e0e8")
-            self._make_clickable(text, row_start, len(text), idx)
+            self._tag_event(text, span_start, len(text), event)
         return text
 
     def _update_fetched_marker(self, snapshot: CalendarSnapshot) -> None:
@@ -236,8 +265,6 @@ class CalendarPanel(Horizontal):
         if passed:
             imp_style = "dim " + imp_style
 
-        idx = len(self._event_index)
-        self._event_index.append(event)
         row_start = len(text)
         if day_label is not None:
             text.append(f"  {day_label} ", style=_DAY_LABEL_STYLE[bucket])
@@ -255,17 +282,13 @@ class CalendarPanel(Horizontal):
         suffix = self._released_suffix(event)
         if suffix is not None:
             text.append(suffix, style=("dim " if passed else "") + _RELEASED_STYLE)
-        self._make_clickable(text, row_start, len(text), idx)
+        self._tag_event(text, row_start, len(text), event)
         text.append("\n", style=title_style)
 
     @staticmethod
-    def _make_clickable(text: Text, start: int, end: int, index: int) -> None:
+    def _tag_event(text: Text, start: int, end: int, event: CalendarEvent) -> None:
         if end > start:
-            text.stylize(
-                Style(meta={"@click": f"app.show_calendar_event({index})"}),
-                start,
-                end,
-            )
+            text.stylize(Style(meta={"cal_event": event}), start, end)
 
     @staticmethod
     def _released_suffix(event: CalendarEvent) -> str | None:
