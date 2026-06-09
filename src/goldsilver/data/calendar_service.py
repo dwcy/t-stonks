@@ -105,6 +105,30 @@ class CalendarService:
         async with httpx.AsyncClient(timeout=10.0) as client:
             await self._refresh_once(client)
 
+    async def fetch_actuals_now(self, event: CalendarEvent) -> CalendarEvent | None:
+        if find_claude() is None:
+            return None
+        self._ensure_fetcher()
+        assert self._actuals_fetcher is not None
+        updated = await self._actuals_fetcher.fetch(event)
+        if updated is None:
+            return None
+        base = self._last_snapshot
+        if base is not None:
+            merged = merge_event(base, updated)
+            self._last_snapshot = merged
+            await self._emit(merged)
+        return updated
+
+    def _ensure_fetcher(self) -> None:
+        if self._actuals_fetcher is not None:
+            return
+        cfg = self._actuals_provider() if self._actuals_provider is not None else None
+        self._actuals_fetcher = ActualsFetcher(
+            max_concurrency=cfg.actuals_max_concurrency if cfg is not None else 2,
+            timeout_seconds=cfg.actuals_timeout_seconds if cfg is not None else 180,
+        )
+
     async def _run(self) -> None:
         async with httpx.AsyncClient(timeout=10.0) as client:
             await self._refresh_once(client)
@@ -233,11 +257,8 @@ class CalendarService:
         cfg = provider()
         if not cfg.actuals_enabled or find_claude() is None:
             return
-        if self._actuals_fetcher is None:
-            self._actuals_fetcher = ActualsFetcher(
-                max_concurrency=cfg.actuals_max_concurrency,
-                timeout_seconds=cfg.actuals_timeout_seconds,
-            )
+        self._ensure_fetcher()
+        assert self._actuals_fetcher is not None
         fetcher = self._actuals_fetcher
         now = datetime.now(timezone.utc)
         pending = [

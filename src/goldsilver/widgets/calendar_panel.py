@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from rich.style import Style
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
@@ -60,6 +61,12 @@ class CalendarPanel(Horizontal):
         super().__init__()
         self.border_title = "Macro Calendar"
         self._compact: bool = False
+        self._event_index: list[CalendarEvent] = []
+
+    def event_at(self, index: int) -> CalendarEvent | None:
+        if 0 <= index < len(self._event_index):
+            return self._event_index[index]
+        return None
 
     def compose(self) -> ComposeResult:
         for bucket in ("today", "upcoming"):
@@ -89,6 +96,7 @@ class CalendarPanel(Horizontal):
 
     def _refresh_body(self) -> None:
         snapshot = self.snapshot
+        self._event_index = []
         compact = snapshot is not None and self._is_today_empty(snapshot)
         self._apply_compact_layout(compact)
         if compact:
@@ -148,6 +156,9 @@ class CalendarPanel(Horizontal):
         for i, (day, event) in enumerate(upcoming_events):
             if i > 0:
                 text.append("  ·  ", style="#5a5a6a")
+            idx = len(self._event_index)
+            self._event_index.append(event)
+            row_start = len(text)
             day_label = day.date.strftime("%a")
             time_label = (
                 "--:--"
@@ -163,6 +174,7 @@ class CalendarPanel(Horizontal):
             )
             title = event.title if len(event.title) <= 40 else event.title[:37] + "…"
             text.append(title, style="#e0e0e8")
+            self._make_clickable(text, row_start, len(text), idx)
         return text
 
     def _update_fetched_marker(self, snapshot: CalendarSnapshot) -> None:
@@ -224,6 +236,9 @@ class CalendarPanel(Horizontal):
         if passed:
             imp_style = "dim " + imp_style
 
+        idx = len(self._event_index)
+        self._event_index.append(event)
+        row_start = len(text)
         if day_label is not None:
             text.append(f"  {day_label} ", style=_DAY_LABEL_STYLE[bucket])
             text.append(f"{time_label} ", style=time_style)
@@ -240,7 +255,17 @@ class CalendarPanel(Horizontal):
         suffix = self._released_suffix(event)
         if suffix is not None:
             text.append(suffix, style=("dim " if passed else "") + _RELEASED_STYLE)
+        self._make_clickable(text, row_start, len(text), idx)
         text.append("\n", style=title_style)
+
+    @staticmethod
+    def _make_clickable(text: Text, start: int, end: int, index: int) -> None:
+        if end > start:
+            text.stylize(
+                Style(meta={"@click": f"app.show_calendar_event({index})"}),
+                start,
+                end,
+            )
 
     @staticmethod
     def _released_suffix(event: CalendarEvent) -> str | None:

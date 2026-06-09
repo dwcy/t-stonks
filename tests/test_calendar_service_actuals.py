@@ -65,6 +65,37 @@ async def test_check_due_fills_passed_event(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_fetch_actuals_now_works_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_run_claude(*_args: object, **_kwargs: object) -> ClaudeResult:
+        return ClaudeResult(status=ReportStatus.SUCCESS, html=_SAMPLE)
+
+    monkeypatch.setattr(calendar_actuals, "run_claude", fake_run_claude)
+    monkeypatch.setattr(calendar_service, "find_claude", lambda: "claude")
+
+    emitted: list[CalendarSnapshot] = []
+
+    async def handler(snapshot: CalendarSnapshot) -> None:
+        emitted.append(snapshot)
+
+    service = CalendarService(
+        handler=handler,
+        actuals_settings_provider=lambda: CalendarSettings(actuals_enabled=False),
+    )
+    snapshot = _snapshot_with_passed_high()
+    service._last_snapshot = snapshot
+    event = snapshot.days[0].events[0]
+
+    updated = await service.fetch_actuals_now(event)
+
+    assert updated is not None
+    assert updated.status == "RELEASED"
+    assert len(emitted) == 1
+    assert emitted[0].days[0].events[0].actual == "3.2%"
+
+
+@pytest.mark.asyncio
 async def test_check_due_disabled_does_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

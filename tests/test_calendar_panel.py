@@ -58,6 +58,36 @@ async def test_today_high_event_renders_impact_tag() -> None:
 
 
 @pytest.mark.asyncio
+async def test_event_at_returns_rendered_event() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        panel = app.query_one(CalendarPanel)
+        panel.apply_snapshot(_today_snapshot(_high_event()))
+        await pilot.pause()
+
+        assert panel.event_at(0) is not None
+        assert panel.event_at(0).title == "CPI (May)"
+        assert panel.event_at(9) is None
+
+
+@pytest.mark.asyncio
+async def test_event_row_carries_click_meta() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        panel = app.query_one(CalendarPanel)
+        panel.apply_snapshot(_today_snapshot(_high_event()))
+        await pilot.pause()
+        rendered = app.query_one("#cal-today", Static).render()
+
+    clicks = [
+        getattr(span.style, "meta", {}).get("@click")
+        for span in rendered.spans
+        if not isinstance(span.style, str) and getattr(span.style, "meta", None)
+    ]
+    assert "app.show_calendar_event(0)" in clicks
+
+
+@pytest.mark.asyncio
 async def test_released_event_renders_actual_figure() -> None:
     event = _high_event().model_copy(
         update={

@@ -1,3 +1,4 @@
+from goldsilver.widgets.calendar_event_screen import CalendarEventScreen
 from goldsilver.widgets.calendar_panel import CalendarPanel
 from goldsilver.widgets.chart import PriceChart
 from goldsilver.widgets.commodity_tile import CommodityTile
@@ -18,6 +19,7 @@ from goldsilver.widgets.trade_simulator import TradeSimulatorScreen
 
 
 __all__ = [
+    "CalendarEventScreen",
     "CalendarPanel",
     "CommodityTile",
     "CongressPanel",

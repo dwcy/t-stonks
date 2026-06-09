@@ -752,6 +752,59 @@ DisconnectScreen {
     color: #7a4a4a;
 }
 
+CalendarEventScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+#cal-event-dialog {
+    width: 60;
+    height: auto;
+    padding: 1 2;
+    background: #14141c;
+    border: round #8ab4ff;
+    layout: vertical;
+}
+
+#cal-event-title {
+    width: 100%;
+    height: auto;
+    color: #e8e8f0;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#cal-event-meta {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+#cal-event-figures {
+    width: 100%;
+    height: auto;
+}
+
+#cal-event-status {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+}
+
+#cal-event-actions {
+    height: 3;
+    margin-top: 1;
+}
+
+#cal-event-fetch {
+    width: 1fr;
+    margin: 0 1 0 0;
+}
+
+#cal-event-close {
+    width: 18;
+}
+
 PlotSettingsScreen .sub-label {
     color: #7a7a8a;
     height: 1;

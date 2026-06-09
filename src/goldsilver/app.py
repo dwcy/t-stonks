@@ -29,6 +29,7 @@ from goldsilver.data import (
 )
 from goldsilver.data.models import GOLD, SILVER, Bar, Tick
 from goldsilver.data.models_macro import (
+    CalendarEvent,
     CalendarSnapshot,
     CommodityQuote,
     CommoditySymbol,
@@ -50,6 +51,7 @@ from goldsilver.data.signal_strategies import (
 )
 from goldsilver.data.history_service import HistoryService
 from goldsilver.data.service import POLL_INTERVAL_S
+from goldsilver.reports.claude_runner import find_claude
 from goldsilver.reports.html_writer import delete_report, write_index
 from goldsilver.reports.models import ReportRun
 from goldsilver.reports.report_service import ReportService
@@ -58,6 +60,7 @@ from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
 from goldsilver.data.trades_service import TradesService
 from goldsilver.widgets import (
+    CalendarEventScreen,
     CalendarPanel,
     CommodityTile,
     CongressPanel,
@@ -132,6 +135,7 @@ class GoldSilverApp(App[None]):
         self._fx_tiles: dict[FxPair, FxTile] = {}
         self._commodity_tiles: dict[CommoditySymbol, CommodityTile] = {}
         self._calendar_panel: CalendarPanel | None = None
+        self._calendar_event_screen: CalendarEventScreen | None = None
         self._service = MetalsService(
             tick_handler=self._on_tick,
             status_handler=self._on_status,
@@ -573,6 +577,40 @@ class GoldSilverApp(App[None]):
     async def _on_calendar(self, snapshot: CalendarSnapshot) -> None:
         if self._calendar_panel is not None:
             self._calendar_panel.apply_snapshot(snapshot)
+
+    def action_show_calendar_event(self, index: int) -> None:
+        if self._calendar_panel is None:
+            return
+        event = self._calendar_panel.event_at(index)
+        if event is None:
+            return
+        screen = CalendarEventScreen(
+            event,
+            on_fetch=lambda: self._fetch_event_actuals(event),
+            can_fetch=find_claude() is not None,
+        )
+        self._calendar_event_screen = screen
+        self.push_screen(screen, self._on_calendar_event_closed)
+
+    def _on_calendar_event_closed(self, _result: None) -> None:
+        self._calendar_event_screen = None
+
+    def _fetch_event_actuals(self, event: CalendarEvent) -> None:
+        self.run_worker(
+            self._run_fetch_event_actuals(event),
+            exclusive=False,
+            group="cal-actuals-now",
+        )
+
+    async def _run_fetch_event_actuals(self, event: CalendarEvent) -> None:
+        updated = await self._calendar_service.fetch_actuals_now(event)
+        screen = self._calendar_event_screen
+        if screen is None:
+            return
+        if updated is not None:
+            screen.update_event(updated)
+        else:
+            screen.set_status("No released figures found yet.", style="#ff9b6b")
 
     async def _on_fx_rate(self, rate: FxRate) -> None:
         tile = self._fx_tiles.get(rate.pair)
