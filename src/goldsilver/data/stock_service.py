@@ -132,25 +132,48 @@ def _fetch_single(sym: str) -> StockQuote | None:
             prior_close = close
 
     price = closes[-1]
-    if not today_closes:
-        today_closes = [price]
-    if len(today_closes) > MAX_SPARK_POINTS:
-        today_closes = today_closes[-MAX_SPARK_POINTS:]
-
+    fast_price: float | None = None
+    fast_prev: float | None = None
     currency = "USD"
     try:
-        info_currency = ticker.fast_info.currency  # type: ignore[attr-defined]
+        fast_info = ticker.fast_info  # type: ignore[attr-defined]
+        last_price = fast_info.last_price
+        if (
+            isinstance(last_price, (int, float))
+            and last_price == last_price
+            and last_price > 0
+        ):
+            fast_price = float(last_price)
+        prev = fast_info.previous_close
+        if isinstance(prev, (int, float)) and prev == prev and prev > 0:
+            fast_prev = float(prev)
+        info_currency = fast_info.currency
         if isinstance(info_currency, str) and info_currency.strip():
             currency = info_currency.strip().upper()
     except Exception:
         pass
+
+    if fast_price is not None:
+        price = fast_price
+    previous_close = (
+        fast_prev
+        if fast_prev is not None
+        else (prior_close if prior_close > 0 else price)
+    )
+
+    if not today_closes:
+        today_closes = [price]
+    elif price != today_closes[-1]:
+        today_closes.append(price)
+    if len(today_closes) > MAX_SPARK_POINTS:
+        today_closes = today_closes[-MAX_SPARK_POINTS:]
 
     try:
         return StockQuote(
             ticker=sym,
             display_name=sym,
             price=price,
-            previous_close=prior_close if prior_close > 0 else price,
+            previous_close=previous_close,
             intraday_closes=tuple(today_closes),
             currency=currency,
             time=latest_ts.astimezone(timezone.utc),

@@ -1,0 +1,56 @@
+"""StockService must use fast_info for price/prev close so illiquid .V/.TO names aren't stale."""
+
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+
+from goldsilver.data import stock_service
+
+
+class _FastInfo:
+    def __init__(self, last: float | None, prev: float | None, currency: str) -> None:
+        self.last_price = last
+        self.previous_close = prev
+        self.currency = currency
+
+
+class _FakeTicker:
+    def __init__(self, last: float | None, prev: float | None, currency: str) -> None:
+        self._fi = _FastInfo(last, prev, currency)
+
+    def history(self, period: str, interval: str) -> pd.DataFrame:
+        idx = pd.to_datetime(
+            ["2026-06-08 19:00:00+00:00", "2026-06-09 13:00:00+00:00"], utc=True
+        )
+        return pd.DataFrame({"Close": [19.46, 19.50]}, index=idx)
+
+    @property
+    def fast_info(self) -> _FastInfo:
+        return self._fi
+
+
+def test_fetch_single_prefers_fast_info(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        stock_service.yf, "Ticker", lambda _s: _FakeTicker(21.5, 20.75, "CAD")
+    )
+
+    quote = stock_service._fetch_single("LUNR.V")
+
+    assert quote is not None
+    assert quote.price == 21.5
+    assert quote.previous_close == 20.75
+    assert quote.currency == "CAD"
+    assert quote.intraday_closes[-1] == 21.5
+
+
+def test_fetch_single_falls_back_to_intraday(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        stock_service.yf, "Ticker", lambda _s: _FakeTicker(None, None, "CAD")
+    )
+
+    quote = stock_service._fetch_single("LUG.TO")
+
+    assert quote is not None
+    assert quote.price == 19.50
+    assert quote.previous_close == 19.46

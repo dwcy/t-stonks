@@ -105,7 +105,10 @@ _USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 )
-_HEADERS = {"User-Agent": _USER_AGENT, "Accept": "application/rss+xml, application/xml, text/xml, */*"}
+_HEADERS = {
+    "User-Agent": _USER_AGENT,
+    "Accept": "application/rss+xml, application/xml, text/xml, */*",
+}
 _TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
 _PLACEHOLDER_PREFIXES = (
@@ -175,11 +178,15 @@ class _FeedService:
             self._task = None
 
     async def refresh_now(self) -> None:
-        async with httpx.AsyncClient(headers=_HEADERS, timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            headers=_HEADERS, timeout=10.0, follow_redirects=True
+        ) as client:
             await self._refresh_once(client)
 
     async def _run(self) -> None:
-        async with httpx.AsyncClient(headers=_HEADERS, timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            headers=_HEADERS, timeout=10.0, follow_redirects=True
+        ) as client:
             await self._refresh_once(client)
             while not self._stop.is_set():
                 try:
@@ -299,6 +306,7 @@ def _parse_rss(
     title_from_description: bool = False,
 ) -> list[NewsItem]:
     items: list[NewsItem] = []
+    now = datetime.now(timezone.utc)
     for item in root.iter("item"):
         title = (item.findtext("title") or "").strip()
         link = (item.findtext("link") or "").strip()
@@ -318,7 +326,9 @@ def _parse_rss(
         if published is None:
             published = _date_from_url(link)
         if published is None:
-            published = datetime.now(timezone.utc)
+            published = now
+        if published > now:
+            published = now
         try:
             items.append(
                 NewsItem(
