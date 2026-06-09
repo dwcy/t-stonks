@@ -137,7 +137,10 @@ class GoldSilverApp(App[None]):
             status_handler=self._on_status,
         )
         self._history_service = HistoryService(self._service.fetch_history)
-        self._calendar_service = CalendarService(handler=self._on_calendar)
+        self._calendar_service = CalendarService(
+            handler=self._on_calendar,
+            actuals_settings_provider=lambda: self._settings.calendar,
+        )
         self._fx_service = FxService(
             handler=self._on_fx_rate,
             stale_handler=self._on_fx_stale,

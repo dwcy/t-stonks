@@ -176,6 +176,40 @@ class ReportSettings:
             self.out_dir = DEFAULT_OUT_DIR
 
 
+DEFAULT_ACTUALS_GRACE_MINUTES = 5
+DEFAULT_ACTUALS_TIMEOUT_SECONDS = 180
+DEFAULT_ACTUALS_MAX_CONCURRENCY = 2
+ACTUALS_GRACE_BOUNDS: tuple[int, int] = (0, 120)
+ACTUALS_TIMEOUT_BOUNDS: tuple[int, int] = (30, 900)
+ACTUALS_CONCURRENCY_BOUNDS: tuple[int, int] = (1, 8)
+
+
+@dataclass(slots=True)
+class CalendarSettings:
+    actuals_enabled: bool = False
+    actuals_grace_minutes: int = DEFAULT_ACTUALS_GRACE_MINUTES
+    actuals_timeout_seconds: int = DEFAULT_ACTUALS_TIMEOUT_SECONDS
+    actuals_max_concurrency: int = DEFAULT_ACTUALS_MAX_CONCURRENCY
+
+    def __post_init__(self) -> None:
+        self.actuals_enabled = bool(self.actuals_enabled)
+        self.actuals_grace_minutes = _clamp(
+            self.actuals_grace_minutes,
+            ACTUALS_GRACE_BOUNDS,
+            DEFAULT_ACTUALS_GRACE_MINUTES,
+        )
+        self.actuals_timeout_seconds = _clamp(
+            self.actuals_timeout_seconds,
+            ACTUALS_TIMEOUT_BOUNDS,
+            DEFAULT_ACTUALS_TIMEOUT_SECONDS,
+        )
+        self.actuals_max_concurrency = _clamp(
+            self.actuals_max_concurrency,
+            ACTUALS_CONCURRENCY_BOUNDS,
+            DEFAULT_ACTUALS_MAX_CONCURRENCY,
+        )
+
+
 def _default_visible_signals() -> dict[str, bool]:
     from goldsilver.data.signal_strategies import (
         DEFAULT_VISIBLE,
@@ -220,6 +254,7 @@ class AppSettings:
     marker_recoil_strategy: str = ""
     simulator: SimulatorSettings = field(default_factory=SimulatorSettings)
     report: ReportSettings = field(default_factory=ReportSettings)
+    calendar: CalendarSettings = field(default_factory=CalendarSettings)
 
     def __post_init__(self) -> None:
         if self.metals_columns not in METALS_COLUMNS_CHOICES:
@@ -307,6 +342,16 @@ class AppSettings:
                     self.report = ReportSettings()
             else:
                 self.report = ReportSettings()
+        if not isinstance(self.calendar, CalendarSettings):
+            if isinstance(self.calendar, dict):
+                allowed_cal = {f.name for f in fields(CalendarSettings)}
+                clean_cal = {k: v for k, v in self.calendar.items() if k in allowed_cal}
+                try:
+                    self.calendar = CalendarSettings(**clean_cal)
+                except TypeError:
+                    self.calendar = CalendarSettings()
+            else:
+                self.calendar = CalendarSettings()
 
     @classmethod
     def load(cls) -> "AppSettings":

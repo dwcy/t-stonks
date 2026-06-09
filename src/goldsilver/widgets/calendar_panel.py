@@ -36,6 +36,20 @@ _SOURCE_STYLE = {
     "ECB": "#bb9af7",
     "RIKSBANK": "#ffd56b",
 }
+_IMPACT_LABEL = {
+    "HIGH": "HIGH",
+    "MED": "MED ",
+    "LOW": "LOW ",
+}
+_IMPACT_STYLE = {
+    "HIGH": "bold #ff6b6b",
+    "MED": "#ffd56b",
+    "LOW": "#6a6a78",
+}
+_IMPACT_NONE_LABEL = "·   "
+_IMPACT_NONE_STYLE = "#5a5a6a"
+_RELEASED_STYLE = "#7dff8c"
+_TITLE_MAX = 34
 
 
 class CalendarPanel(Horizontal):
@@ -92,6 +106,12 @@ class CalendarPanel(Horizontal):
             self._update_fetched_marker(snapshot)
 
     @staticmethod
+    def _impact_cell(importance: str | None) -> tuple[str, str]:
+        if importance in _IMPACT_LABEL:
+            return _IMPACT_LABEL[importance], _IMPACT_STYLE[importance]
+        return _IMPACT_NONE_LABEL, _IMPACT_NONE_STYLE
+
+    @staticmethod
     def _is_today_empty(snapshot: CalendarSnapshot) -> bool:
         for day in snapshot.days:
             if day.bucket == "today" and day.events:
@@ -135,6 +155,8 @@ class CalendarPanel(Horizontal):
                 else (event.scheduled_time.astimezone(STOCKHOLM).strftime("%H:%M"))
             )
             text.append(f"{day_label} {time_label} ", style="#c0c0d0")
+            imp_label, imp_style = self._impact_cell(event.importance)
+            text.append(f"{imp_label} ", style=imp_style)
             text.append(
                 f"{event.source} ",
                 style=_SOURCE_STYLE.get(event.source, "#c0c0d0"),
@@ -198,12 +220,39 @@ class CalendarPanel(Horizontal):
             if passed
             else _SOURCE_STYLE[event.source]
         )
+        imp_label, imp_style = self._impact_cell(event.importance)
+        if passed:
+            imp_style = "dim " + imp_style
 
         if day_label is not None:
             text.append(f"  {day_label} ", style=_DAY_LABEL_STYLE[bucket])
             text.append(f"{time_label} ", style=time_style)
         else:
             text.append(f"  {time_label} ", style=time_style)
+        text.append(f"{imp_label} ", style=imp_style)
         text.append(f"{event.source:<8} ", style=source_style)
-        title = event.title if len(event.title) <= 40 else event.title[:37] + "..."
-        text.append(f"{title}\n", style=title_style)
+        title = (
+            event.title
+            if len(event.title) <= _TITLE_MAX
+            else event.title[: _TITLE_MAX - 3] + "..."
+        )
+        text.append(title, style=title_style)
+        suffix = self._released_suffix(event)
+        if suffix is not None:
+            text.append(suffix, style=("dim " if passed else "") + _RELEASED_STYLE)
+        text.append("\n", style=title_style)
+
+    @staticmethod
+    def _released_suffix(event: CalendarEvent) -> str | None:
+        if event.status != "RELEASED" and event.actual is None:
+            return None
+        parts: list[str] = []
+        if event.actual:
+            parts.append(f"act {event.actual}")
+        if event.forecast:
+            parts.append(f"fc {event.forecast}")
+        if event.previous:
+            parts.append(f"prev {event.previous}")
+        if not parts:
+            return None
+        return "  " + " / ".join(parts)
