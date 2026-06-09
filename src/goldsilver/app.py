@@ -201,6 +201,7 @@ class GoldSilverApp(App[None]):
         self._timeframe_index = self._settings.timeframe_index
         self._chart_kind: ChartKind = self._settings.chart_kind
         self._chart_zoom = self._settings.chart_zoom
+        self._chart_zoom2 = self._settings.chart_zoom2
         self._chart_mode = self._settings.chart_mode
         self._show_sma = self._settings.show_sma
         self._show_vwap = self._settings.show_vwap
@@ -435,7 +436,8 @@ class GoldSilverApp(App[None]):
             )
             panel.set_chart_mode(self._chart_mode)
             if self._chart_mode == "live":
-                panel.set_chart_zoom(self._chart_zoom)
+                is_dup = panel is self._dup_panels.get(symbol)
+                panel.set_chart_zoom(self._chart_zoom2 if is_dup else self._chart_zoom)
             panel.clear_markers()
         panels = [p for p, _ in group]
         self.run_worker(

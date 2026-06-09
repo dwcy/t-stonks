@@ -228,6 +228,7 @@ class AppSettings:
     timeframe_index: int = 0
     chart_kind: ChartKind = "line"
     chart_zoom: ChartZoom = "24h"
+    chart_zoom2: ChartZoom = "3h"
     chart_mode: ChartMode = "live"
     show_dual_charts: bool = False
     chart_kind2: ChartKind = "candle"
@@ -261,6 +262,8 @@ class AppSettings:
             self.metals_columns = 2
         if self.chart_zoom not in CHART_ZOOM_CHOICES:
             self.chart_zoom = "24h"
+        if self.chart_zoom2 not in CHART_ZOOM_CHOICES:
+            self.chart_zoom2 = "3h"
         if self.chart_mode not in CHART_MODE_CHOICES:
             self.chart_mode = "live"
         if self.chart_kind not in ("line", "candle"):

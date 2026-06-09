@@ -79,6 +79,9 @@ class PriceChart(PlotextPlot):
         self._redraw()
         self.set_interval(1.0, self._clock_tick)
 
+    def on_resize(self) -> None:
+        self._redraw()
+
     def _clock_tick(self) -> None:
         if self._view.mode != "live" or len(self._bars) < 2:
             return
