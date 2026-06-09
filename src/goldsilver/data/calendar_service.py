@@ -4,10 +4,16 @@ import asyncio
 import os
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from goldsilver.data.calendar_actuals import (
+    ActualsFetcher,
+    due_events,
+    merge_event,
+)
 from goldsilver.data.calendar_static import load_static_events, window_around
 from goldsilver.data.models_macro import (
     CalendarDay,
@@ -15,22 +21,30 @@ from goldsilver.data.models_macro import (
     CalendarSnapshot,
 )
 from goldsilver.data.session import STOCKHOLM
+from goldsilver.reports.claude_runner import find_claude
+
+if TYPE_CHECKING:
+    from goldsilver.data.settings import CalendarSettings
 
 
 CalendarHandler = Callable[[CalendarSnapshot], Awaitable[None] | None]
+CalendarSettingsProvider = Callable[[], "CalendarSettings"]
 
 FRED_URL = "https://api.stlouisfed.org/fred/releases/dates"
 FRED_KEY_ENV = "GOLDSILVER_FRED_KEY"
 CALENDAR_REFRESH_INTERVAL_S = 600.0
-_HIGH_IMPORTANCE_RELEASES = frozenset({
-    "Consumer Price Index",
-    "Producer Price Index",
-    "Employment Situation",
-    "Gross Domestic Product",
-    "Personal Income and Outlays",
-    "Retail Trade",
-    "Industrial Production and Capacity Utilization",
-})
+ACTUALS_CHECK_INTERVAL_S = 60.0
+_HIGH_IMPORTANCE_RELEASES = frozenset(
+    {
+        "Consumer Price Index",
+        "Producer Price Index",
+        "Employment Situation",
+        "Gross Domestic Product",
+        "Personal Income and Outlays",
+        "Retail Trade",
+        "Industrial Production and Capacity Utilization",
+    }
+)
 
 
 class _FredReleaseDate(BaseModel):
@@ -50,11 +64,17 @@ class CalendarService:
         *,
         refresh_interval_s: float = CALENDAR_REFRESH_INTERVAL_S,
         fred_key: str | None = None,
+        actuals_settings_provider: CalendarSettingsProvider | None = None,
     ) -> None:
         self._handler = handler
         self._refresh_interval_s = refresh_interval_s
-        self._fred_key = fred_key if fred_key is not None else os.environ.get(FRED_KEY_ENV)
+        self._fred_key = (
+            fred_key if fred_key is not None else os.environ.get(FRED_KEY_ENV)
+        )
+        self._actuals_provider = actuals_settings_provider
         self._task: asyncio.Task[None] | None = None
+        self._actuals_task: asyncio.Task[None] | None = None
+        self._actuals_fetcher: ActualsFetcher | None = None
         self._stop = asyncio.Event()
         self._last_snapshot: CalendarSnapshot | None = None
 
@@ -62,20 +82,52 @@ class CalendarService:
         if self._task is None or self._task.done():
             self._stop.clear()
             self._task = asyncio.create_task(self._run(), name="calendar-loop")
+        if self._actuals_provider is not None and (
+            self._actuals_task is None or self._actuals_task.done()
+        ):
+            self._actuals_task = asyncio.create_task(
+                self._actuals_loop(), name="calendar-actuals-loop"
+            )
 
     async def stop(self) -> None:
         self._stop.set()
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except (asyncio.CancelledError, Exception):
-                pass
-            self._task = None
+        for attr in ("_task", "_actuals_task"):
+            task = getattr(self, attr)
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+                setattr(self, attr, None)
 
     async def refresh_now(self) -> None:
         async with httpx.AsyncClient(timeout=10.0) as client:
             await self._refresh_once(client)
+
+    async def fetch_actuals_now(self, event: CalendarEvent) -> CalendarEvent | None:
+        if find_claude() is None:
+            return None
+        self._ensure_fetcher()
+        assert self._actuals_fetcher is not None
+        updated = await self._actuals_fetcher.fetch(event)
+        if updated is None:
+            return None
+        base = self._last_snapshot
+        if base is not None:
+            merged = merge_event(base, updated)
+            self._last_snapshot = merged
+            await self._emit(merged)
+        return updated
+
+    def _ensure_fetcher(self) -> None:
+        if self._actuals_fetcher is not None:
+            return
+        cfg = self._actuals_provider() if self._actuals_provider is not None else None
+        self._actuals_fetcher = ActualsFetcher(
+            max_concurrency=cfg.actuals_max_concurrency if cfg is not None else 2,
+            timeout_seconds=cfg.actuals_timeout_seconds if cfg is not None else 180,
+        )
 
     async def _run(self) -> None:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -135,11 +187,17 @@ class CalendarService:
                     source="FED",
                     title=rd.release_name,
                     scheduled_time=datetime(
-                        rd.date.year, rd.date.month, rd.date.day,
-                        12, 0, tzinfo=timezone.utc,
+                        rd.date.year,
+                        rd.date.month,
+                        rd.date.day,
+                        12,
+                        0,
+                        tzinfo=timezone.utc,
                     ),
                     all_day=True,
-                    importance="HIGH" if rd.release_name in _HIGH_IMPORTANCE_RELEASES else "MED",
+                    importance="HIGH"
+                    if rd.release_name in _HIGH_IMPORTANCE_RELEASES
+                    else "MED",
                 )
             except ValidationError:
                 continue
@@ -163,9 +221,7 @@ class CalendarService:
             d = today_stk + timedelta(days=offset)
             bucket = "today" if offset == 0 else "upcoming"
             day_events = sorted(by_date.get(d, []), key=lambda e: e.scheduled_time)
-            days.append(
-                CalendarDay(date=d, bucket=bucket, events=tuple(day_events))
-            )
+            days.append(CalendarDay(date=d, bucket=bucket, events=tuple(day_events)))
         return CalendarSnapshot(
             days=tuple(days),
             fetched_at=datetime.now(timezone.utc),
@@ -178,3 +234,48 @@ class CalendarService:
         result = self._handler(snapshot)
         if asyncio.iscoroutine(result):
             await result
+
+    async def _actuals_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._stop.wait(), timeout=ACTUALS_CHECK_INTERVAL_S
+                )
+                return
+            except asyncio.TimeoutError:
+                pass
+            try:
+                await self._check_due()
+            except Exception:
+                pass
+
+    async def _check_due(self) -> None:
+        provider = self._actuals_provider
+        snapshot = self._last_snapshot
+        if provider is None or snapshot is None:
+            return
+        cfg = provider()
+        if not cfg.actuals_enabled or find_claude() is None:
+            return
+        self._ensure_fetcher()
+        assert self._actuals_fetcher is not None
+        fetcher = self._actuals_fetcher
+        now = datetime.now(timezone.utc)
+        pending = [
+            e
+            for e in due_events(snapshot, now, cfg.actuals_grace_minutes)
+            if fetcher.should_fetch(e)
+        ]
+        if not pending:
+            return
+        results = await asyncio.gather(
+            *(fetcher.fetch(e) for e in pending), return_exceptions=True
+        )
+        updated = [r for r in results if isinstance(r, CalendarEvent)]
+        if not updated:
+            return
+        merged = self._last_snapshot or snapshot
+        for event in updated:
+            merged = merge_event(merged, event)
+        self._last_snapshot = merged
+        await self._emit(merged)

@@ -79,6 +79,9 @@ class PriceChart(PlotextPlot):
         self._redraw()
         self.set_interval(1.0, self._clock_tick)
 
+    def on_resize(self) -> None:
+        self._redraw()
+
     def _clock_tick(self) -> None:
         if self._view.mode != "live" or len(self._bars) < 2:
             return
@@ -279,22 +282,12 @@ class PriceChart(PlotextPlot):
         self._view.pinned_indices.clear()
         self._redraw()
 
-    def on_mouse_scroll_up(self, event) -> None:  # type: ignore[no-untyped-def]
+    def on_click(self, event) -> None:  # type: ignore[no-untyped-def]
         if self._view.mode != "live":
             return
         i = ZOOM_ORDER.index(self._view.zoom)
-        if i + 1 < len(ZOOM_ORDER):
-            self._view.zoom = ZOOM_ORDER[i + 1]
-            self._redraw()
-        event.stop()
-
-    def on_mouse_scroll_down(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self._view.mode != "live":
-            return
-        i = ZOOM_ORDER.index(self._view.zoom)
-        if i > 0:
-            self._view.zoom = ZOOM_ORDER[i - 1]
-            self._redraw()
+        self._view.zoom = ZOOM_ORDER[(i + 1) % len(ZOOM_ORDER)]
+        self._redraw()
         event.stop()
 
     def _redraw(self) -> None:

@@ -25,6 +25,7 @@ class CalendarEvent(BaseModel):
     forecast: str | None = None
     previous: str | None = None
     actual: str | None = None
+    actual_summary: str | None = None
     status: EventStatus = "SCHEDULED"
 
     @field_validator("scheduled_time")
@@ -137,10 +138,27 @@ class Signal(BaseModel):
 
 
 NewsSource = Literal[
-    "REUTERS", "CNBC", "WllStrtJrnl", "BLOOMBERG", "POLITICO", "YAHOO", "FOX",
-    "DgnsIndstr", "SVT", "BREAKIT", "AffrsVrldn",
-    "REDEYE", "BrsKlln", "Placera", "EFN", "TT", "TRUMP",
-    "WHITEHOUSE", "PressTV", "IRNA", "MEHR",
+    "REUTERS",
+    "CNBC",
+    "WllStrtJrnl",
+    "BLOOMBERG",
+    "POLITICO",
+    "YAHOO",
+    "FOX",
+    "DgnsIndstr",
+    "SVT",
+    "BREAKIT",
+    "AffrsVrldn",
+    "REDEYE",
+    "BrsKlln",
+    "Placera",
+    "EFN",
+    "TT",
+    "TRUMP",
+    "WHITEHOUSE",
+    "PressTV",
+    "IRNA",
+    "MEHR",
 ]
 
 

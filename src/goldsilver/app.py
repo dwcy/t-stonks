@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sys
+import webbrowser
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import cast
 
 from rich.text import Text
@@ -27,6 +29,7 @@ from goldsilver.data import (
 )
 from goldsilver.data.models import GOLD, SILVER, Bar, Tick
 from goldsilver.data.models_macro import (
+    CalendarEvent,
     CalendarSnapshot,
     CommodityQuote,
     CommoditySymbol,
@@ -48,10 +51,16 @@ from goldsilver.data.signal_strategies import (
 )
 from goldsilver.data.history_service import HistoryService
 from goldsilver.data.service import POLL_INTERVAL_S
+from goldsilver.reports.claude_runner import find_claude
+from goldsilver.reports.html_writer import delete_report, write_index
+from goldsilver.reports.models import ReportRun
+from goldsilver.reports.report_service import ReportService
+from goldsilver.reports.scheduler import ReportScheduler
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
 from goldsilver.data.trades_service import TradesService
 from goldsilver.widgets import (
+    CalendarEventScreen,
     CalendarPanel,
     CommodityTile,
     CongressPanel,
@@ -64,6 +73,7 @@ from goldsilver.widgets import (
     OmxStrip,
     PlotSettings,
     PlotSettingsScreen,
+    ReportWatchlistScreen,
     StockRow,
     StockTwitsPanel,
     TradeSimulatorScreen,
@@ -104,6 +114,7 @@ class GoldSilverApp(App[None]):
         Binding("q", "quit", "Quit"),
         Binding("p", "plot_settings", "Settings"),
         Binding("t", "trade_simulator", "Trade Sim"),
+        Binding("g", "reports", "Reports"),
         Binding("r", "refresh", "Refresh"),
         Binding("z", "cycle_zoom", "Zoom"),
         Binding("h", "cycle_chart_mode", "Mode"),
@@ -124,12 +135,16 @@ class GoldSilverApp(App[None]):
         self._fx_tiles: dict[FxPair, FxTile] = {}
         self._commodity_tiles: dict[CommoditySymbol, CommodityTile] = {}
         self._calendar_panel: CalendarPanel | None = None
+        self._calendar_event_screen: CalendarEventScreen | None = None
         self._service = MetalsService(
             tick_handler=self._on_tick,
             status_handler=self._on_status,
         )
         self._history_service = HistoryService(self._service.fetch_history)
-        self._calendar_service = CalendarService(handler=self._on_calendar)
+        self._calendar_service = CalendarService(
+            handler=self._on_calendar,
+            actuals_settings_provider=lambda: self._settings.calendar,
+        )
         self._fx_service = FxService(
             handler=self._on_fx_rate,
             stale_handler=self._on_fx_stale,
@@ -186,6 +201,7 @@ class GoldSilverApp(App[None]):
         self._timeframe_index = self._settings.timeframe_index
         self._chart_kind: ChartKind = self._settings.chart_kind
         self._chart_zoom = self._settings.chart_zoom
+        self._chart_zoom2 = self._settings.chart_zoom2
         self._chart_mode = self._settings.chart_mode
         self._show_sma = self._settings.show_sma
         self._show_vwap = self._settings.show_vwap
@@ -199,6 +215,13 @@ class GoldSilverApp(App[None]):
             settings_persister=self._persist_settings,
             on_enable_changed=self._on_simulator_enabled,
         )
+        self._report_service = ReportService(
+            lambda: self._settings.report,
+            on_run_complete=self._on_report_done,
+        )
+        self._report_runs: list[ReportRun] = []
+        self._report_scheduler: ReportScheduler | None = None
+        self._report_screen: ReportWatchlistScreen | None = None
 
     @property
     def _timeframe_label(self) -> str:
@@ -279,7 +302,7 @@ class GoldSilverApp(App[None]):
                 yield silver
                 yield gold2
                 yield silver2
-            calendar = CalendarPanel()
+            calendar = CalendarPanel(on_event_selected=self._show_calendar_event)
             self._calendar_panel = calendar
             yield calendar
             news = NewsPanel("Markets news")
@@ -326,8 +349,12 @@ class GoldSilverApp(App[None]):
         self._seed_all()
         if self._settings.simulator.enabled:
             self._start_simulator_replay()
+        if self._settings.report.enabled:
+            self._start_report_scheduler()
 
     async def on_unmount(self) -> None:
+        if self._report_scheduler is not None:
+            self._report_scheduler.request_stop()
         await self._service.stop()
         await self._history_service.stop()
         await self._calendar_service.stop()
@@ -409,7 +436,8 @@ class GoldSilverApp(App[None]):
             )
             panel.set_chart_mode(self._chart_mode)
             if self._chart_mode == "live":
-                panel.set_chart_zoom(self._chart_zoom)
+                is_dup = panel is self._dup_panels.get(symbol)
+                panel.set_chart_zoom(self._chart_zoom2 if is_dup else self._chart_zoom)
             panel.clear_markers()
         panels = [p for p, _ in group]
         self.run_worker(
@@ -551,6 +579,35 @@ class GoldSilverApp(App[None]):
     async def _on_calendar(self, snapshot: CalendarSnapshot) -> None:
         if self._calendar_panel is not None:
             self._calendar_panel.apply_snapshot(snapshot)
+
+    def _show_calendar_event(self, event: CalendarEvent) -> None:
+        screen = CalendarEventScreen(
+            event,
+            on_fetch=lambda: self._fetch_event_actuals(event),
+            can_fetch=find_claude() is not None,
+        )
+        self._calendar_event_screen = screen
+        self.push_screen(screen, self._on_calendar_event_closed)
+
+    def _on_calendar_event_closed(self, _result: None) -> None:
+        self._calendar_event_screen = None
+
+    def _fetch_event_actuals(self, event: CalendarEvent) -> None:
+        self.run_worker(
+            self._run_fetch_event_actuals(event),
+            exclusive=False,
+            group="cal-actuals-now",
+        )
+
+    async def _run_fetch_event_actuals(self, event: CalendarEvent) -> None:
+        updated = await self._calendar_service.fetch_actuals_now(event)
+        screen = self._calendar_event_screen
+        if screen is None:
+            return
+        if updated is not None:
+            screen.update_event(updated)
+        else:
+            screen.set_status("No released figures found yet.", style="#ff9b6b")
 
     async def _on_fx_rate(self, rate: FxRate) -> None:
         tile = self._fx_tiles.get(rate.pair)
@@ -767,6 +824,96 @@ class GoldSilverApp(App[None]):
 
     async def action_trade_simulator(self) -> None:
         self.push_screen(TradeSimulatorScreen())
+
+    def action_reports(self) -> None:
+        screen = ReportWatchlistScreen(
+            self._settings.report,
+            on_change=self._on_report_settings_change,
+            on_generate=self._action_generate_reports,
+            on_open=self._open_report,
+            on_retry=self._retry_report,
+            on_delete=self._delete_report,
+            recent=self._report_runs[:20],
+            generating=sorted(self._report_service.in_flight()),
+        )
+        self._report_screen = screen
+        self.push_screen(screen, self._on_report_screen_closed)
+
+    def _on_report_screen_closed(self, _result: None) -> None:
+        self._report_screen = None
+
+    def _on_report_settings_change(self) -> None:
+        self._persist_settings()
+        if self._settings.report.enabled and self._report_scheduler is None:
+            self._start_report_scheduler()
+        elif not self._settings.report.enabled and self._report_scheduler is not None:
+            self._report_scheduler.request_stop()
+            self._report_scheduler = None
+
+    def _start_report_scheduler(self) -> None:
+        if self._report_scheduler is not None:
+            return
+        scheduler = ReportScheduler(
+            self._report_service,
+            enabled=lambda: self._settings.report.enabled,
+            interval_minutes=lambda: self._settings.report.interval_minutes,
+        )
+        self._report_scheduler = scheduler
+        self.run_worker(
+            scheduler.run_loop(),
+            exclusive=True,
+            group="report-scheduler",
+        )
+
+    def _action_generate_reports(self) -> None:
+        self._run_reports(self._report_service.effective_watchlist(), replace=True)
+
+    def _retry_report(self, symbol: str) -> None:
+        tickers = self._report_service.resolve_tickers([symbol])
+        self._run_reports(tickers, replace=False)
+
+    def _run_reports(self, tickers: list, *, replace: bool) -> None:
+        symbols = [t.symbol for t in tickers]
+        if self._report_screen is not None:
+            if replace:
+                self._report_screen.mark_generating(symbols)
+            else:
+                self._report_screen.add_generating(symbols)
+        self.run_worker(
+            self._generate_reports(list(tickers), symbols),
+            exclusive=False,
+            group="report-generate",
+        )
+
+    async def _generate_reports(self, tickers: list, symbols: list[str]) -> None:
+        self.notify(f"Generating {len(symbols)} report(s)…", timeout=3)
+        runs = await self._report_service.run_all(tickers)
+        if self._report_screen is not None:
+            self._report_screen.clear_generating(symbols)
+        ok = sum(1 for r in runs if r.html_path)
+        self.notify(f"Reports done: {ok}/{len(runs)}", timeout=5)
+
+    def _on_report_done(self, run: ReportRun) -> None:
+        self._report_runs = [r for r in self._report_runs if r.ticker != run.ticker]
+        self._report_runs.insert(0, run)
+        del self._report_runs[50:]
+        if self._report_screen is not None:
+            self._report_screen.mark_done(run)
+
+    def _delete_report(self, run: ReportRun) -> None:
+        root = self._report_service.out_root()
+        delete_report(root, run.html_path)
+        self._report_runs = [r for r in self._report_runs if r is not run]
+        write_index(root)
+
+    def _open_report(self, run: ReportRun) -> None:
+        if not run.html_path:
+            return
+        path = self._report_service.out_root() / run.html_path
+        try:
+            webbrowser.open(path.resolve().as_uri())
+        except OSError:
+            self.notify("Could not open report", severity="error", timeout=5)
 
     async def _on_simulator_enabled(self) -> None:
         self._start_simulator_replay()
