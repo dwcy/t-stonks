@@ -77,6 +77,7 @@ from goldsilver.widgets import (
     OmxStrip,
     PlotSettings,
     PlotSettingsScreen,
+    RatioTile,
     StockRow,
     StockTwitsPanel,
     TradeSimulatorScreen,
@@ -89,6 +90,7 @@ TRUMP_SOURCE = "TRUMP"
 
 _FX_PAIR_IDS: frozenset[str] = frozenset({"USDSEK", "CADSEK", "EURSEK"})
 _COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC"})
+_RATIO_ID = "RATIO"
 
 TIMEFRAMES: list[tuple[str, str, str, str | None]] = [
     ("today", "2d", "1m", "today"),
@@ -138,6 +140,8 @@ class GoldSilverApp(App[None]):
         self._dup_panels: dict[str, MetalPanel] = {}
         self._fx_tiles: dict[FxPair, FxTile] = {}
         self._commodity_tiles: dict[CommoditySymbol, CommodityTile] = {}
+        self._ratio_tile: RatioTile | None = None
+        self._last_tick: dict[str, Tick] = {}
         self._calendar_panel: CalendarPanel | None = None
         self._calendar_event_screen: CalendarEventScreen | None = None
         self._service = MetalsService(
@@ -256,6 +260,10 @@ class GoldSilverApp(App[None]):
                         cm_tile = CommodityTile(symbol)
                         self._commodity_tiles[symbol] = cm_tile
                         yield cm_tile
+                    elif tile_id == _RATIO_ID:
+                        ratio_tile = RatioTile()
+                        self._ratio_tile = ratio_tile
+                        yield ratio_tile
             omx = OmxStrip()
             self._omx_strip = omx
             yield omx
@@ -499,6 +507,8 @@ class GoldSilverApp(App[None]):
     async def _on_tick(self, tick: Tick) -> None:
         self._last_tick_at = tick.time
         self._last_price[tick.symbol] = (tick.price, tick.time)
+        self._last_tick[tick.symbol] = tick
+        self._update_ratio_tile()
         panels = self._symbol_panels(tick.symbol)
         mom: Signal | None = None
         rec: Signal | None = None
@@ -614,6 +624,18 @@ class GoldSilverApp(App[None]):
         else:
             screen.set_status("No released figures found yet.", style="#ff9b6b")
 
+    def _update_ratio_tile(self) -> None:
+        if self._ratio_tile is None:
+            return
+        gold = self._last_tick.get(GOLD)
+        silver = self._last_tick.get(SILVER)
+        if gold is None or silver is None or silver.price <= 0:
+            return
+        prev: float | None = None
+        if gold.prev_close > 0 and silver.prev_close > 0:
+            prev = gold.prev_close / silver.prev_close
+        self._ratio_tile.apply_ratio(gold.price / silver.price, prev)
+
     async def _on_fx_rate(self, rate: FxRate) -> None:
         tile = self._fx_tiles.get(rate.pair)
         if tile is not None:
@@ -679,7 +701,8 @@ class GoldSilverApp(App[None]):
         strip.remove_children()
         self._fx_tiles.clear()
         self._commodity_tiles.clear()
-        new_widgets: list[FxTile | CommodityTile | Static] = []
+        self._ratio_tile = None
+        new_widgets: list[FxTile | CommodityTile | RatioTile | Static] = []
         for i, tile_id in enumerate(self._settings.mini_tiles):
             if i > 0:
                 new_widgets.append(Static("|", classes="mini-sep"))
@@ -693,9 +716,14 @@ class GoldSilverApp(App[None]):
                 ct = CommodityTile(symbol)
                 self._commodity_tiles[symbol] = ct
                 new_widgets.append(ct)
+            elif tile_id == _RATIO_ID:
+                rt = RatioTile()
+                self._ratio_tile = rt
+                new_widgets.append(rt)
         if new_widgets:
             strip.mount(*new_widgets)
         strip.display = bool(new_widgets)
+        self._update_ratio_tile()
 
     def _apply_news_panel(self) -> None:
         if self._news_panel is None:

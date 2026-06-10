@@ -63,11 +63,12 @@ ALLOWED_MINI_TILES: tuple[str, ...] = (
     "BTC",
     "BRENT",
     "COPPER",
+    "RATIO",
 )
 
 
 def _default_mini_tiles() -> list[str]:
-    return ["USDSEK", "CADSEK", "EURSEK", "COPPER", "BTC", "BRENT"]
+    return ["USDSEK", "CADSEK", "EURSEK", "COPPER", "BTC", "BRENT", "RATIO"]
 
 
 SellMode = Literal["all", "percent"]

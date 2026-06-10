@@ -84,7 +84,7 @@ MetalPanel > .change-row {
     padding: 0 2;
 }
 
-.fx-tile, .commodity-tile {
+.fx-tile, .commodity-tile, .ratio-tile {
     width: 1fr;
     height: 1;
     content-align: left middle;
