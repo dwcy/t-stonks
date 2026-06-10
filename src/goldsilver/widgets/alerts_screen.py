@@ -87,7 +87,12 @@ class AlertsScreen(ModalScreen[None]):
     def _build_rows(self) -> list[Horizontal]:
         entries = self._entries()
         if not entries:
-            return [Horizontal(Label("(no alerts set)", classes="alert-empty"))]
+            return [
+                Horizontal(
+                    Label("(no alerts set)", classes="alert-empty"),
+                    classes="alert-row",
+                )
+            ]
         rows: list[Horizontal] = []
         for i, (symbol, level) in enumerate(entries):
             rows.append(

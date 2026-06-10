@@ -468,6 +468,10 @@ AlertsScreen .alert-add-row Input {
     width: 100%;
 }
 
+#report-ticker-list, #report-recent-list, #report-accuracy-list {
+    height: auto;
+}
+
 ReportWatchlistScreen .report-section-label {
     height: 1;
     color: #a0a0b0;

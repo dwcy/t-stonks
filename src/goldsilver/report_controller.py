@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import webbrowser
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from goldsilver.reports.html_writer import delete_report, load_recent_runs, write_index
 from goldsilver.reports.models import ReportRun, ReportTicker
 from goldsilver.reports.report_service import ReportService
 from goldsilver.reports.scheduler import ReportScheduler
+from goldsilver.reports.verdict_tracker import (
+    evaluate_accuracy,
+    fetch_daily_closes,
+    yf_symbol_for_run,
+)
 from goldsilver.widgets import ReportWatchlistScreen
 
 if TYPE_CHECKING:
@@ -39,6 +46,24 @@ class ReportController:
         )
         self._screen = screen
         self._app.push_screen(screen, self._on_screen_closed)
+        self._app.run_worker(
+            self._load_accuracy(),
+            exclusive=True,
+            group="report-accuracy",
+        )
+
+    async def _load_accuracy(self) -> None:
+        runs = [r for r in self._runs if r.verdict is not None]
+        if not runs:
+            if self._screen is not None:
+                self._screen.set_accuracy([])
+            return
+        start = min(r.started_at.date() for r in runs) - timedelta(days=5)
+        symbols = {r.ticker: yf_symbol_for_run(r) for r in runs}
+        closes = await asyncio.to_thread(fetch_daily_closes, symbols, start)
+        rows = evaluate_accuracy(runs, closes)
+        if self._screen is not None:
+            self._screen.set_accuracy(rows)
 
     def start_scheduler_if_enabled(self) -> None:
         if self._app._settings.report.enabled:

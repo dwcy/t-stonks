@@ -13,6 +13,7 @@ from textual.widgets import Button, Input, Label, Switch
 from goldsilver.data.settings import ReportSettings
 from goldsilver.reports.constants import METAL_LABELS, PINNED_METALS, safe_name
 from goldsilver.reports.models import ReportRun, ReportStatus
+from goldsilver.reports.verdict_tracker import TickerAccuracy
 
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
@@ -84,6 +85,12 @@ class ReportWatchlistScreen(ModalScreen[None]):
                 with Vertical(id="report-recent-list"):
                     for row in self._build_recent_rows():
                         yield row
+                yield Label("Verdict accuracy", classes="report-section-label")
+                with Vertical(id="report-accuracy-list"):
+                    yield Horizontal(
+                        Label("computing…", classes="report-empty"),
+                        classes="report-recent-row",
+                    )
             with Horizontal(id="report-actions"):
                 yield Button("Generate now", variant="primary", id="report-generate")
                 yield Button("Close", id="report-close")
@@ -204,6 +211,36 @@ class ReportWatchlistScreen(ModalScreen[None]):
         self._refresh_recent()
         if not self._generating:
             self._stop_spinner()
+
+    def set_accuracy(self, rows: list[TickerAccuracy]) -> None:
+        try:
+            container = self.query_one("#report-accuracy-list", Vertical)
+        except NoMatches:
+            return
+        container.remove_children()
+        if not rows:
+            container.mount(
+                Horizontal(
+                    Label("(no scored verdicts yet)", classes="report-empty"),
+                    classes="report-recent-row",
+                )
+            )
+            return
+
+        def _fmt(hits: int, n: int) -> str:
+            return f"{hits}/{n} ({hits / n * 100:.0f}%)" if n else "—"
+
+        for row in rows:
+            container.mount(
+                Horizontal(
+                    Label(
+                        f"{row.ticker:<8} intraday {_fmt(row.intraday_hits, row.intraday_n)}"
+                        f"  ·  swing {_fmt(row.swing_hits, row.swing_n)}",
+                        classes="report-recent-label",
+                    ),
+                    classes="report-recent-row",
+                )
+            )
 
     def remove_run(self, run: ReportRun) -> None:
         self._recent = [r for r in self._recent if r is not run]
