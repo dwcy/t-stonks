@@ -138,6 +138,7 @@ class ReportSettings:
     enabled: bool = False
     interval_minutes: int = DEFAULT_INTERVAL_MINUTES
     report_tickers: list[str] = field(default_factory=_default_report_tickers)
+    report_excluded: list[str] = field(default_factory=list)
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
     max_concurrency: int = DEFAULT_MAX_CONCURRENCY
     allowed_tools: list[str] = field(default_factory=_default_allowed_tools)
@@ -168,6 +169,20 @@ class ReportSettings:
                 seen.add(t)
                 cleaned.append(t)
             self.report_tickers = cleaned
+        if not isinstance(self.report_excluded, list):
+            self.report_excluded = []
+        else:
+            excluded: list[str] = []
+            seen_ex: set[str] = set()
+            for raw in self.report_excluded:
+                if not isinstance(raw, str):
+                    continue
+                t = raw.strip().upper()
+                if not t or t in seen_ex:
+                    continue
+                seen_ex.add(t)
+                excluded.append(t)
+            self.report_excluded = excluded
         if not isinstance(self.allowed_tools, list):
             self.allowed_tools = _default_allowed_tools()
         else:

@@ -387,9 +387,15 @@ ReportWatchlistScreen .report-section-label {
     margin-top: 1;
 }
 
-ReportWatchlistScreen .report-pinned {
-    height: 1;
-    color: #ffd56b;
+ReportWatchlistScreen .report-include {
+    margin: 0 1 0 0;
+}
+
+ReportWatchlistScreen .report-gen {
+    min-width: 14;
+    width: 14;
+    height: 3;
+    margin: 0 1 0 0;
 }
 
 ReportWatchlistScreen .report-switch-row {
