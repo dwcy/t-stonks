@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import httpx
 import yfinance as yf
 
 from goldsilver.data.models import Bar, GOLD, SILVER, Tick
+from goldsilver.data.session import stockholm_date_of
+
+_log = logging.getLogger(__name__)
 
 
 TickHandler = Callable[[Tick], Awaitable[None] | None]
@@ -24,9 +28,7 @@ GOLDPRICE_HEADERS = {
     "Referer": "https://goldprice.org/",
 }
 
-AVANZA_INSTRUMENT_URL = (
-    "https://www.avanza.se/_api/market-guide/stock/{orderbook_id}"
-)
+AVANZA_INSTRUMENT_URL = "https://www.avanza.se/_api/market-guide/stock/{orderbook_id}"
 AVANZA_ORDERBOOK = {GOLD: "18986", SILVER: "18991"}
 
 HISTORICAL_SYMBOL = {GOLD: "GC=F", SILVER: "SI=F"}
@@ -61,6 +63,7 @@ class MetalsService:
         self._avanza: dict[str, _AvanzaSession] = {}
         self._live_high: dict[str, float] = {}
         self._live_low: dict[str, float] = {}
+        self._live_session_date: date | None = None
         self._avanza_refresh_task: asyncio.Task[None] | None = None
 
     async def fetch_history(
@@ -90,9 +93,7 @@ class MetalsService:
     async def _fetch_avanza(
         self, client: httpx.AsyncClient, symbol: str
     ) -> _AvanzaSession | None:
-        url = AVANZA_INSTRUMENT_URL.format(
-            orderbook_id=AVANZA_ORDERBOOK[symbol]
-        )
+        url = AVANZA_INSTRUMENT_URL.format(orderbook_id=AVANZA_ORDERBOOK[symbol])
         try:
             response = await client.get(url)
             response.raise_for_status()
@@ -128,6 +129,11 @@ class MetalsService:
             await self._refresh_avanza_once(client)
 
     def _make_tick(self, symbol: str, price: float, time: datetime) -> Tick:
+        tick_date = stockholm_date_of(time)
+        if tick_date != self._live_session_date:
+            self._live_session_date = tick_date
+            self._live_high.clear()
+            self._live_low.clear()
         session = self._avanza.get(symbol)
         if session is None:
             baseline = price
@@ -156,6 +162,9 @@ class MetalsService:
         if self._task is None or self._task.done():
             self._stop.clear()
             self._last_ts = None
+            self._live_high.clear()
+            self._live_low.clear()
+            self._live_session_date = None
             self._task = asyncio.create_task(self._run(), name="metals-poll")
 
     async def stop(self) -> None:
@@ -218,32 +227,38 @@ class MetalsService:
                 self._avanza_refresh_loop(avanza_client),
                 name="avanza-refresh",
             )
+            try:
+                async with httpx.AsyncClient(
+                    headers=GOLDPRICE_HEADERS, timeout=5.0
+                ) as client:
+                    while not self._stop.is_set():
+                        try:
+                            response = await client.get(GOLDPRICE_URL)
+                            response.raise_for_status()
+                            await self._handle_payload(response.json())
+                        except (httpx.HTTPError, ValueError):
+                            await self._emit_status("reconnecting")
+                        except asyncio.CancelledError:
+                            raise
+                        # A handler bug must not silently kill the feed:
+                        # surface it as a reconnect and keep polling.
+                        except Exception:
+                            _log.exception("tick pipeline failed")
+                            await self._emit_status("reconnecting")
 
-            async with httpx.AsyncClient(
-                headers=GOLDPRICE_HEADERS, timeout=5.0
-            ) as client:
-                while not self._stop.is_set():
-                    try:
-                        response = await client.get(GOLDPRICE_URL)
-                        response.raise_for_status()
-                        payload = response.json()
-                    except (httpx.HTTPError, ValueError):
-                        await self._emit_status("reconnecting")
                         try:
                             await asyncio.wait_for(
                                 self._stop.wait(), timeout=self._poll_interval_s
                             )
                             return
                         except asyncio.TimeoutError:
-                            pass
-                        continue
-
-                    await self._handle_payload(payload)
-
+                            continue
+            finally:
+                refresh_task = self._avanza_refresh_task
+                self._avanza_refresh_task = None
+                if refresh_task is not None:
+                    refresh_task.cancel()
                     try:
-                        await asyncio.wait_for(
-                            self._stop.wait(), timeout=self._poll_interval_s
-                        )
-                        return
-                    except asyncio.TimeoutError:
-                        continue
+                        await refresh_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
