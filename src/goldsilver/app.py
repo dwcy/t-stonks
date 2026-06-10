@@ -10,6 +10,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Grid, Horizontal, VerticalScroll
+from textual.css.query import NoMatches
 from textual.widgets import Footer, Header, Static
 
 from goldsilver.data import (
@@ -346,7 +347,7 @@ class GoldSilverApp(App[None]):
         try:
             strip = self.query_one("#macro-strip", Horizontal)
             strip.display = bool(self._settings.mini_tiles)
-        except Exception:
+        except NoMatches:
             pass
         self._service.start()
         self._history_service.start()
@@ -678,7 +679,7 @@ class GoldSilverApp(App[None]):
     def _apply_metals_columns(self) -> None:
         try:
             container = self.query_one("#metals")
-        except Exception:
+        except NoMatches:
             return
         for n in (1, 2, 3, 4):
             container.remove_class(f"cards-{n}")
@@ -687,7 +688,7 @@ class GoldSilverApp(App[None]):
     def _apply_mini_tiles(self) -> None:
         try:
             strip = self.query_one("#macro-strip", Horizontal)
-        except Exception:
+        except NoMatches:
             return
         strip.remove_children()
         self._fx_tiles.clear()
@@ -783,7 +784,7 @@ class GoldSilverApp(App[None]):
     def _refresh_status_bar(self) -> None:
         try:
             bar = self.query_one("#status-bar", Static)
-        except Exception:
+        except NoMatches:
             return
         style = STATUS_STYLES.get(self._connection_status, "#7a7a8a")
         if self._last_tick_at is None:

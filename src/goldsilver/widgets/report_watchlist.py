@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Switch
 
@@ -157,13 +158,13 @@ class ReportWatchlistScreen(ModalScreen[None]):
         for sym in self._generating:
             try:
                 self.query_one(f"#spin-{safe_name(sym)}", Label).update(frame)
-            except Exception:
+            except NoMatches:
                 pass
 
     def _refresh_recent(self) -> None:
         try:
             container = self.query_one("#report-recent-list", Vertical)
-        except Exception:
+        except NoMatches:
             return
         container.remove_children()
         container.mount(*self._build_recent_rows())

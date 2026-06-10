@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widgets import Static
 from textual_plotext import PlotextPlot
@@ -76,7 +77,7 @@ class StockTile(Vertical):
         try:
             head = self.query_one("#stock-head", Static)
             spark = self.query_one(_StockSpark)
-        except Exception:
+        except NoMatches:
             return
         head.update(self._render_header())
         quote = self.quote

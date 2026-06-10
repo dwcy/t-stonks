@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal
+from textual.css.query import NoMatches
 from textual.widgets import Button, DataTable, Input, Label, Select, Static, TabPane
+from textual.widgets.data_table import CellDoesNotExist, DuplicateKey, RowDoesNotExist
 
 from goldsilver.data.backtest import run_backtest
 from goldsilver.data.history_store import available_days
@@ -261,7 +263,7 @@ async def run_and_render(screen: TradeSimulatorScreen, symbol: str) -> None:
     _set_static(screen, ids["stats"], _stats_text(symbol, day, summary))
     try:
         table = screen.query_one(f"#{ids['trades']}", DataTable)
-    except Exception:
+    except NoMatches:
         return
     _sync_rows(screen, symbol, table, summary)
 
@@ -278,7 +280,7 @@ def _sync_rows(
         if key not in new_rows:
             try:
                 table.remove_row(key)
-            except Exception:
+            except RowDoesNotExist:
                 pass
             rendered.discard(key)
     for key, cells in new_rows.items():
@@ -286,14 +288,14 @@ def _sync_rows(
             for col_key, value in zip(_TRADE_COL_KEYS, cells):
                 try:
                     table.update_cell(key, col_key, value)
-                except Exception:
+                except CellDoesNotExist:
                     pass
         else:
             try:
                 table.add_row(*cells, key=key)
                 rendered.add(key)
-            except Exception:
-                pass
+            except DuplicateKey:
+                rendered.add(key)
 
 
 def _stats_text(symbol: str, day: date, s: SimulatorSummary) -> Text:
