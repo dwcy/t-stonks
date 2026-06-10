@@ -12,6 +12,7 @@ from typing import Any
 
 from goldsilver.data.models_macro import Signal
 from goldsilver.data.settings import SimulatorSettings, trades_path
+from goldsilver.fsutil import atomic_write_text
 from goldsilver.data.trade_models import (
     ConsensusAction,
     DailyPnL,
@@ -396,7 +397,7 @@ class TradesService:
             "trades": [_trade_to_dict(t) for t in self._trades[-_TRADE_CAP:]],
             "daily": [_daily_to_dict(d) for d in self._daily],
         }
-        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        atomic_write_text(path, json.dumps(data, indent=2))
 
     def _load(self) -> None:
         path = trades_path()

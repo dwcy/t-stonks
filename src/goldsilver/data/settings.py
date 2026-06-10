@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Literal
 
+from goldsilver.fsutil import atomic_write_text
 from goldsilver.reports.constants import (
     CONCURRENCY_BOUNDS,
     DEFAULT_ALLOWED_TOOLS,
@@ -377,7 +378,7 @@ class AppSettings:
     def save(self) -> None:
         path = settings_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
+        atomic_write_text(path, json.dumps(asdict(self), indent=2))
 
     def gold_rgb(self) -> tuple[int, int, int]:
         return GOLD_PRESETS.get(self.gold_color_name, GOLD_PRESETS[DEFAULT_GOLD])

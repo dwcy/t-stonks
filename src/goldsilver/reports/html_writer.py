@@ -3,20 +3,14 @@
 from __future__ import annotations
 
 import html as _html
-import os
 from pathlib import Path
 
+from goldsilver.fsutil import atomic_write_text as _atomic_write_text
 from goldsilver.reports.constants import safe_name
 from goldsilver.reports.models import ReportRun, ReportStatus
 
 _VERDICT_COLORS = {"BUY": "#1f9d55", "HOLD": "#d9a400", "SELL": "#d23b3b"}
 _DOC_PREFIXES = ("<!doctype html", "<html")
-
-
-def _atomic_write_text(path: Path, text: str) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
 
 
 def is_valid_html(payload: str | None) -> bool:
