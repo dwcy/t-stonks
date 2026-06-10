@@ -168,6 +168,13 @@ OmxStrip {
     content-align: left middle;
 }
 
+FuturesStrip {
+    height: auto;
+    padding: 0 2;
+    background: #14141c;
+    content-align: left middle;
+}
+
 StockRow {
     height: 7;
     padding: 0;
