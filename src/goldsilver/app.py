@@ -883,6 +883,7 @@ class GoldSilverApp(App[None]):
             self._report_service,
             enabled=lambda: self._settings.report.enabled,
             interval_minutes=lambda: self._settings.report.interval_minutes,
+            on_error=lambda msg: self.notify(msg, severity="error", timeout=8),
         )
         self._report_scheduler = scheduler
         self.run_worker(
@@ -970,6 +971,8 @@ class GoldSilverApp(App[None]):
         today_local = stockholm_now().date()
         mom = mom_cls()
         rec = rec_cls()
+        self._apply_overrides_to(mom)
+        self._apply_overrides_to(rec)
         for bar in bars:
             m = mom.observe(symbol, bar.close, bar.time)
             r = rec.observe(symbol, bar.close, bar.time)
@@ -1012,9 +1015,15 @@ class GoldSilverApp(App[None]):
             self._settings.save()
         except OSError:
             pass
+        if strategy_name in (
+            self._settings.marker_momentum_strategy,
+            self._settings.marker_recoil_strategy,
+        ):
+            self._seed_all()
 
     async def action_refresh(self) -> None:
         self._connection_status = "reconnecting"
+        self._disconnect_dismissed = False
         self._refresh_status_bar()
         await self._service.stop()
         self._service.start()
@@ -1024,10 +1033,12 @@ class GoldSilverApp(App[None]):
         await self._news_service.refresh_now()
         await self._trump_service.refresh_now()
         await self._omx_service.refresh_now()
+        await self._futures_service.refresh_now()
         await self._stock_service.refresh_now()
         await self._congress_service.refresh_now()
         await self._insider_service.refresh_now()
         await self._stocktwits_service.refresh_now()
+        self._seed_all()
 
     def action_cycle_zoom(self) -> None:
         if self._chart_mode != "live":
@@ -1223,12 +1234,12 @@ class GoldSilverApp(App[None]):
             self._seed_all()
 
     def _apply_param_overrides(self) -> None:
-        for name, kv in self._settings.signal_params.items():
-            strategy = self._strategy_by_name.get(name)
-            if strategy is None:
-                continue
-            for key, value in kv.items():
-                strategy.set_param(key, value)
+        for strategy in self._strategies:
+            self._apply_overrides_to(strategy)
+
+    def _apply_overrides_to(self, strategy: SignalStrategy) -> None:
+        for key, value in self._settings.signal_params.get(strategy.name, {}).items():
+            strategy.set_param(key, value)
 
     def _sync_visible_signals(self) -> None:
         names = [
