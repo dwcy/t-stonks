@@ -87,6 +87,9 @@ class SimulatorSettings:
     sell_mode: SellMode = "all"
     sell_pct: float = 0.50
     trigger_mode: TriggerMode = "either"
+    stop_loss_pct: float = 0.0
+    take_profit_pct: float = 0.0
+    trailing_stop_pct: float = 0.0
 
     def __post_init__(self) -> None:
         if not isinstance(self.enabled, bool):
@@ -113,6 +116,14 @@ class SimulatorSettings:
             self.sell_pct = 0.50
         if self.trigger_mode not in ("both", "either"):
             self.trigger_mode = "either"
+        for attr in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct"):
+            try:
+                v = float(getattr(self, attr))
+            except (TypeError, ValueError):
+                v = 0.0
+            if not (0.0 <= v <= 50.0):
+                v = 0.0
+            setattr(self, attr, v)
 
 
 def _default_report_tickers() -> list[str]:

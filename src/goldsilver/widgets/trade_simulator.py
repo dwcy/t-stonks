@@ -91,6 +91,27 @@ class TradeSimulatorScreen(ModalScreen[None]):
                         with RadioSet(id="sim-trigger"):
                             yield RadioButton("Either", value=True)
                             yield RadioButton("Both")
+                    with Horizontal(classes="sim-row sim-header-row"):
+                        yield Label("Stop-loss % (0=off)", classes="sim-header-cell")
+                        yield Label("Take-profit % (0=off)", classes="sim-header-cell")
+                        yield Label("Trailing % (0=off)", classes="sim-header-cell")
+                    with Horizontal(classes="sim-row sim-sell-row"):
+                        sim = self.app._settings.simulator  # type: ignore[attr-defined]
+                        yield Input(
+                            value=f"{sim.stop_loss_pct:g}",
+                            id="sim-stop-pct",
+                            classes="sim-pct-input",
+                        )
+                        yield Input(
+                            value=f"{sim.take_profit_pct:g}",
+                            id="sim-tp-pct",
+                            classes="sim-pct-input",
+                        )
+                        yield Input(
+                            value=f"{sim.trailing_stop_pct:g}",
+                            id="sim-trail-pct",
+                            classes="sim-pct-input",
+                        )
                 with TabbedContent(id="sim-tabs"):
                     with TabPane("Recent", id="sim-tab-recent"):
                         trades_table = DataTable(id="sim-trades", zebra_stripes=True)
@@ -353,6 +374,19 @@ class TradeSimulatorScreen(ModalScreen[None]):
             except ValueError:
                 return
             await self._service().update_settings(sell_pct=pct)
+            return
+        rule_fields = {
+            "sim-stop-pct": "stop_loss_pct",
+            "sim-tp-pct": "take_profit_pct",
+            "sim-trail-pct": "trailing_stop_pct",
+        }
+        attr = rule_fields.get(event.input.id or "")
+        if attr is not None:
+            try:
+                value = float(event.value.replace(",", "."))
+            except ValueError:
+                return
+            await self._service().update_settings(**{attr: value})
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id

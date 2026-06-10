@@ -67,10 +67,20 @@ class TradesService:
                 return
             now_local = to_local(ts_utc)
             self._check_clock(now_local, last_prices)
+            rule_trade: Trade | None = None
+            if is_open(now_local):
+                rule_trade = self._check_rule_exits(symbol, price, ts_utc)
+                if rule_trade is not None:
+                    self._trades.append(rule_trade)
             consensus = self._consensus_action(mom, rec)
             prev = self._state.last_consensus_action.get(symbol, "NONE")
             self._state.last_consensus_action[symbol] = consensus
-            if is_open(now_local) and consensus != "NONE" and prev != consensus:
+            if (
+                rule_trade is None
+                and is_open(now_local)
+                and consensus != "NONE"
+                and prev != consensus
+            ):
                 rule_snap = self._rule_snapshot()
                 sig_snap = {
                     "momentum": mom.action if mom is not None else "NONE",
@@ -319,6 +329,8 @@ class TradesService:
         new_units = pos.units + units
         new_cost_basis = pos.cost_basis + cost
         pos.avg_cost = new_cost_basis / new_units if new_units > 0 else 0.0
+        # A re-entry must not inherit the old run's high-water mark.
+        pos.high_water = price if pos.units <= 0.0 else max(pos.high_water, price)
         pos.units = new_units
         self._state.positions[symbol] = pos
         self._state.cash -= cost
@@ -411,7 +423,46 @@ class TradesService:
             "sell_pct": self._settings.sell_pct,
             "trigger_mode": self._settings.trigger_mode,
             "initial_deposit": self._settings.initial_deposit,
+            "stop_loss_pct": self._settings.stop_loss_pct,
+            "take_profit_pct": self._settings.take_profit_pct,
+            "trailing_stop_pct": self._settings.trailing_stop_pct,
         }
+
+    def _check_rule_exits(
+        self, symbol: str, price: float, ts_utc: datetime
+    ) -> Trade | None:
+        pos = self._state.positions.get(symbol)
+        if pos is None or pos.units <= 0.0 or pos.avg_cost <= 0.0:
+            return None
+        if price > pos.high_water:
+            pos.high_water = price
+        s = self._settings
+        reason: TradeReason | None = None
+        if s.stop_loss_pct > 0.0 and price <= pos.avg_cost * (
+            1.0 - s.stop_loss_pct / 100.0
+        ):
+            reason = "stop_loss"
+        elif s.take_profit_pct > 0.0 and price >= pos.avg_cost * (
+            1.0 + s.take_profit_pct / 100.0
+        ):
+            reason = "take_profit"
+        elif (
+            s.trailing_stop_pct > 0.0
+            and pos.high_water > 0.0
+            and price <= pos.high_water * (1.0 - s.trailing_stop_pct / 100.0)
+        ):
+            reason = "trailing_stop"
+        if reason is None:
+            return None
+        return self._execute_sell_units(
+            symbol=symbol,
+            units=pos.units,
+            price=price,
+            ts_utc=ts_utc,
+            reason=reason,
+            rule_snap=self._rule_snapshot(),
+            signals={},
+        )
 
     def _persist(self) -> None:
         if not self._persist_enabled:

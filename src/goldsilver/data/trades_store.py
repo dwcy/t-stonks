@@ -86,6 +86,7 @@ def _state_from_dict(d: dict[str, Any], default_cash: float) -> SimulatorState:
                 symbol=str(payload.get("symbol", sym)),
                 units=float(payload.get("units", 0.0)),
                 avg_cost=float(payload.get("avg_cost", 0.0)),
+                high_water=float(payload.get("high_water", 0.0)),
             )
     day_raw = d.get("day_start_local")
     day_val: date | None = None
@@ -161,7 +162,15 @@ def _trade_from_dict(d: dict[str, Any]) -> Trade:
         realized_pnl=float(d.get("realized_pnl", 0.0)),
         reason=d.get("reason")
         if d.get("reason")
-        in ("signal_buy", "signal_sell", "eod_liquidation", "manual_reset")
+        in (
+            "signal_buy",
+            "signal_sell",
+            "eod_liquidation",
+            "manual_reset",
+            "stop_loss",
+            "take_profit",
+            "trailing_stop",
+        )
         else "signal_buy",
         position_units=float(d.get("position_units", 0.0)),
         rule_snapshot=d.get("rule_snapshot")

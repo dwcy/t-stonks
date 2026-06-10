@@ -34,6 +34,9 @@ _SELL_MODE_OPTIONS = [("Sell all", "all"), ("Percent", "percent")]
 _REASON_LABEL: dict[str, str] = {
     "signal_buy": "Buy signal",
     "signal_sell": "Sell signal",
+    "stop_loss": "Stop-loss",
+    "take_profit": "Take-profit",
+    "trailing_stop": "Trailing stop",
     "eod_liquidation": "End-of-day liquidation",
     "manual_reset": "Manual reset",
 }
