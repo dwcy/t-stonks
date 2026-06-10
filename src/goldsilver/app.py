@@ -498,6 +498,7 @@ class GoldSilverApp(App[None]):
         week_avg = sum(b.close for b in week) / len(week)
         month_avg = sum(b.close for b in month) / len(month)
         year_avg = sum(b.close for b in year) / len(year)
+        ma200 = sum(b.close for b in bars[-200:]) / 200 if len(bars) >= 200 else None
         for panel in panels:
             panel.set_stats(
                 week_high=week_high,
@@ -505,6 +506,7 @@ class GoldSilverApp(App[None]):
                 week_avg=week_avg,
                 month_avg=month_avg,
                 year_avg=year_avg,
+                ma200=ma200,
             )
 
     async def _on_tick(self, tick: Tick) -> None:

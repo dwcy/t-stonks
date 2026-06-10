@@ -144,9 +144,7 @@ class MetalPanel(Vertical):
         *,
         heavy: bool = False,
     ) -> None:
-        self.query_one(PriceChart).add_marker(
-            price, time, color, heavy=heavy
-        )
+        self.query_one(PriceChart).add_marker(price, time, color, heavy=heavy)
 
     def clear_markers(self) -> None:
         self.query_one(PriceChart).clear_markers()
@@ -159,6 +157,7 @@ class MetalPanel(Vertical):
         week_avg: float,
         month_avg: float,
         year_avg: float,
+        ma200: float | None = None,
     ) -> None:
         self._stats = {
             "wh": week_high,
@@ -167,6 +166,8 @@ class MetalPanel(Vertical):
             "m": month_avg,
             "y": year_avg,
         }
+        if ma200 is not None:
+            self._stats["ma200"] = ma200
         self._refresh_header()
 
     def _refresh_indicators(self) -> None:
@@ -182,7 +183,8 @@ class MetalPanel(Vertical):
             label = _short_strategy_label(name)
             sig = self._signals.get(name)
             label_color = (
-                "dim #bb9af7" if sig is not None and sig.kind == "recoil"
+                "dim #bb9af7"
+                if sig is not None and sig.kind == "recoil"
                 else "dim #7dcfff"
             )
             parts.append((f"{label} ", label_color))
@@ -255,9 +257,7 @@ class MetalPanel(Vertical):
             widget.update(Text("--:--:--", style="dim #5a5a6a"))
             return
         local = ts.astimezone()
-        widget.update(
-            Text(local.strftime("%H:%M:%S"), style="dim #7a7a8a")
-        )
+        widget.update(Text(local.strftime("%H:%M:%S"), style="dim #7a7a8a"))
 
     def _render_header(self) -> Text:
         if self.price is None:
@@ -267,14 +267,16 @@ class MetalPanel(Vertical):
             ("USD", "dim #7a7a8a"),
         ]
         if self.day_high != 0.0 or self.day_low != 0.0:
-            parts.extend([
-                ("   ", ""),
-                ("H ", "#7a7a8a"),
-                (f"{self.day_high:,.2f}", "#7dff8c"),
-                ("   ", ""),
-                ("L ", "#7a7a8a"),
-                (f"{self.day_low:,.2f}", "#ff6b6b"),
-            ])
+            parts.extend(
+                [
+                    ("   ", ""),
+                    ("H ", "#7a7a8a"),
+                    (f"{self.day_high:,.2f}", "#7dff8c"),
+                    ("   ", ""),
+                    ("L ", "#7a7a8a"),
+                    (f"{self.day_low:,.2f}", "#ff6b6b"),
+                ]
+            )
         text = Text.assemble(*parts)
         if self._stats is not None:
             s = self._stats
@@ -291,6 +293,10 @@ class MetalPanel(Vertical):
             text.append("  ·  ", style="#3a3a4a")
             text.append("Ȳ ", style="dim #7a7a8a")
             text.append(f"{s['y']:,.2f}", style="#c0c0d0")
+            if "ma200" in s:
+                text.append("  ·  ", style="#3a3a4a")
+                text.append("MA200 ", style="dim #7a7a8a")
+                text.append(f"{s['ma200']:,.2f}", style="#64c8e6")
         return text
 
     def _render_change_row(self) -> Text:
