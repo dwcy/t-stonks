@@ -102,3 +102,7 @@ class SimulatorSummary:
     sell_pct: float
     trigger_mode: TriggerMode
     liquidated_for_day: bool
+    max_drawdown: float = 0.0
+    win_rate: float | None = None
+    avg_win: float | None = None
+    avg_loss: float | None = None

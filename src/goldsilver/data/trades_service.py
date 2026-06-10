@@ -135,6 +135,7 @@ class TradesService:
         lifetime_pct = (
             (self._state.lifetime_realized_pnl / init * 100.0) if init > 0 else 0.0
         )
+        max_drawdown, win_rate, avg_win, avg_loss = self._trade_stats(init)
         return SimulatorSummary(
             enabled=self._settings.enabled,
             is_open=is_open(now_local),
@@ -151,7 +152,35 @@ class TradesService:
             sell_pct=self._settings.sell_pct,
             trigger_mode=self._settings.trigger_mode,
             liquidated_for_day=self._state.liquidated_for_day,
+            max_drawdown=max_drawdown,
+            win_rate=win_rate,
+            avg_win=avg_win,
+            avg_loss=avg_loss,
         )
+
+    def _trade_stats(
+        self, initial_deposit: float
+    ) -> tuple[float, float | None, float | None, float | None]:
+        wins: list[float] = []
+        losses: list[float] = []
+        equity = initial_deposit
+        peak = initial_deposit
+        max_drawdown = 0.0
+        for t in self._trades:
+            if t.side != "SELL":
+                continue
+            if t.realized_pnl > 0:
+                wins.append(t.realized_pnl)
+            elif t.realized_pnl < 0:
+                losses.append(t.realized_pnl)
+            equity += t.realized_pnl
+            peak = max(peak, equity)
+            max_drawdown = max(max_drawdown, peak - equity)
+        closed = len(wins) + len(losses)
+        win_rate = (len(wins) / closed * 100.0) if closed else None
+        avg_win = (sum(wins) / len(wins)) if wins else None
+        avg_loss = (sum(losses) / len(losses)) if losses else None
+        return max_drawdown, win_rate, avg_win, avg_loss
 
     def _build_history(self) -> tuple[DayHistory, ...]:
         buys: dict[date, int] = {}

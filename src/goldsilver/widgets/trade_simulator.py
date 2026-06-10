@@ -53,6 +53,8 @@ class TradeSimulatorScreen(ModalScreen[None]):
                     yield Static("", id="sim-lifetime", classes="sim-stat")
                     yield Static("", id="sim-status", classes="sim-stat")
                 with Horizontal(classes="sim-row"):
+                    yield Static("", id="sim-analytics", classes="sim-stat")
+                with Horizontal(classes="sim-row"):
                     yield Static("", id="sim-pos-gold", classes="sim-pos")
                     yield Static("", id="sim-pos-silver", classes="sim-pos")
                 with Vertical(classes="sim-controls"):
@@ -164,6 +166,20 @@ class TradeSimulatorScreen(ModalScreen[None]):
                 (status_text, f"bold {status_color}"),
             ),
         )
+        if s.win_rate is None:
+            analytics = Text("No closed trades yet", style="dim #7a7a8a")
+        else:
+            analytics = Text.assemble(
+                ("Win rate  ", "#a0a0b0"),
+                (f"{s.win_rate:.0f}%   ", "bold #e0e0e8"),
+                ("Avg win  ", "#a0a0b0"),
+                (f"{_fmt_money(s.avg_win or 0.0)}   ", f"bold {_pnl_color(1.0)}"),
+                ("Avg loss  ", "#a0a0b0"),
+                (f"{_fmt_money(s.avg_loss or 0.0)}   ", f"bold {_pnl_color(-1.0)}"),
+                ("Max drawdown  ", "#a0a0b0"),
+                (f"{_fmt_money(-s.max_drawdown)}", "bold #ff9b6b"),
+            )
+        self._set_static("sim-analytics", analytics)
         gold_pos = next((p for p in s.positions if p.symbol == "XAU"), None)
         silver_pos = next((p for p in s.positions if p.symbol == "XAG"), None)
         self._set_static("sim-pos-gold", self._format_position("Gold", gold_pos))
