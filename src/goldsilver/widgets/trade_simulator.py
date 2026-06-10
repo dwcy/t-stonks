@@ -20,7 +20,15 @@ from textual.widgets import (
     TabPane,
 )
 
+from textual.css.query import NoMatches
+
 from goldsilver.data.models import GOLD, SILVER
+from goldsilver.data.signal_stats import (
+    DEFAULT_HORIZON_MINUTES,
+    StrategyScore,
+    score_all,
+)
+from goldsilver.data.signal_strategies import STRATEGY_REGISTRY
 from goldsilver.data.trade_models import SellMode, SimulatorSummary, TriggerMode
 from goldsilver.widgets.trade_backtest import (
     compose_backtest_pane,
@@ -105,6 +113,24 @@ class TradeSimulatorScreen(ModalScreen[None]):
                         history_table.add_column("Trades", key="trades")
                         history_table.add_column("Realized P/L", key="pnl")
                         yield history_table
+                    with TabPane("Signal stats", id="sim-tab-signal-stats"):
+                        yield Static(
+                            f"Scoring 2d of 1m bars against the close "
+                            f"{DEFAULT_HORIZON_MINUTES}m after each fire…",
+                            id="sim-signal-stats-note",
+                        )
+                        stats_table = DataTable(
+                            id="sim-signal-stats", zebra_stripes=True
+                        )
+                        stats_table.add_columns(
+                            "Strategy",
+                            "Kind",
+                            "Gold fires",
+                            "Gold win%",
+                            "Silver fires",
+                            "Silver win%",
+                        )
+                        yield stats_table
                     yield from compose_backtest_pane(GOLD, self.app._settings)
                     yield from compose_backtest_pane(SILVER, self.app._settings)
             with Horizontal(id="trade-sim-footer"):
@@ -117,6 +143,41 @@ class TradeSimulatorScreen(ModalScreen[None]):
         self.set_interval(1.0, self._refresh)
         refresh_day_options(self, GOLD)
         refresh_day_options(self, SILVER)
+        self.run_worker(
+            self._load_signal_stats(), exclusive=True, group="sim-signal-stats"
+        )
+
+    async def _load_signal_stats(self) -> None:
+        service = self.app._service  # type: ignore[attr-defined]
+        overrides = self.app._settings.signal_params  # type: ignore[attr-defined]
+        bars_by_symbol = {}
+        for symbol in (GOLD, SILVER):
+            try:
+                bars_by_symbol[symbol] = await service.fetch_history(
+                    symbol, period="2d", interval="1m"
+                )
+            except Exception:
+                bars_by_symbol[symbol] = []
+        self._fill_signal_stats(score_all(bars_by_symbol, overrides))
+
+    def _fill_signal_stats(self, scores: dict[str, dict[str, StrategyScore]]) -> None:
+        try:
+            table = self.query_one("#sim-signal-stats", DataTable)
+        except NoMatches:
+            return
+
+        def _cells(score: StrategyScore | None) -> tuple[str, str]:
+            if score is None or score.win_rate is None:
+                return (str(score.fires) if score else "0", "—")
+            return (str(score.fires), f"{score.win_rate:.0f}%")
+
+        table.clear()
+        for cls in STRATEGY_REGISTRY:
+            gold_fires, gold_win = _cells(scores.get(GOLD, {}).get(cls.name))
+            silver_fires, silver_win = _cells(scores.get(SILVER, {}).get(cls.name))
+            table.add_row(
+                cls.name, cls.kind, gold_fires, gold_win, silver_fires, silver_win
+            )
 
     def _refresh(self) -> None:
         svc = self._service()
