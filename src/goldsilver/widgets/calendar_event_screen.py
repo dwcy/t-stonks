@@ -26,6 +26,15 @@ _SOURCE_STYLE = {
 _LABEL_STYLE = "#7a7a8a"
 _VALUE_STYLE = "#e0e0e8"
 _RELEASED_STYLE = "#7dff8c"
+_DIR_STYLE = {"bullish": "#7dff8c", "bearish": "#ff6b6b", "neutral": "#9a9aa8"}
+_DIR_ARROW = {"bullish": "▲", "bearish": "▼", "neutral": "→"}
+_SURPRISE_LABEL = {
+    "above": "above forecast",
+    "below": "below forecast",
+    "inline": "in line",
+    "na": "",
+}
+_SURPRISE_STYLE = {"above": "#ffd56b", "below": "#ffd56b", "inline": "#9a9aa8"}
 
 
 class CalendarEventScreen(ModalScreen[None]):
@@ -48,6 +57,7 @@ class CalendarEventScreen(ModalScreen[None]):
             yield Static(self._event.title, id="cal-event-title")
             yield Static(self._build_meta(), id="cal-event-meta")
             yield Static(self._build_figures(), id="cal-event-figures")
+            yield Static(self._build_analysis(), id="cal-event-analysis")
             yield Static("", id="cal-event-status")
             with Horizontal(id="cal-event-actions"):
                 if self._can_fetch:
@@ -99,10 +109,38 @@ class CalendarEventScreen(ModalScreen[None]):
             text.append(event.actual_summary, style="#c0c0d0")
         return text
 
+    def _build_analysis(self) -> Text:
+        analysis = self._event.analysis
+        text = Text()
+        if analysis is None:
+            return text
+        text.append("\nImpact read\n", style=_LABEL_STYLE)
+        surprise = _SURPRISE_LABEL.get(analysis.surprise, "")
+        if surprise:
+            text.append("vs consensus  ", style=_LABEL_STYLE)
+            text.append(
+                f"{surprise}\n",
+                style=_SURPRISE_STYLE.get(analysis.surprise, _VALUE_STYLE),
+            )
+        for label, direction in (
+            ("Gold   ", analysis.gold),
+            ("Silver ", analysis.silver),
+            ("USD    ", analysis.usd),
+        ):
+            text.append(label, style=_LABEL_STYLE)
+            text.append(
+                f"{_DIR_ARROW[direction]} {direction}\n", style=_DIR_STYLE[direction]
+            )
+        if analysis.rationale:
+            text.append("\n")
+            text.append(analysis.rationale, style="#c0c0d0")
+        return text
+
     def update_event(self, event: CalendarEvent) -> None:
         self._event = event
         self.query_one("#cal-event-meta", Static).update(self._build_meta())
         self.query_one("#cal-event-figures", Static).update(self._build_figures())
+        self.query_one("#cal-event-analysis", Static).update(self._build_analysis())
         self.query_one("#cal-event-status", Static).update(
             Text("Updated.", style=_RELEASED_STYLE)
         )

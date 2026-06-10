@@ -12,6 +12,18 @@ EventStatus = Literal["SCHEDULED", "RELEASED", "CANCELLED", "PASSED"]
 SnapshotStatus = Literal["ok", "stale", "unavailable"]
 FxPair = Literal["USDSEK", "CADSEK", "EURSEK"]
 CommoditySymbol = Literal["BRENT", "COPPER", "BTC"]
+ImpactDirection = Literal["bullish", "bearish", "neutral"]
+SurpriseDirection = Literal["above", "below", "inline", "na"]
+
+
+class EventAnalysis(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    surprise: SurpriseDirection = "na"
+    gold: ImpactDirection = "neutral"
+    silver: ImpactDirection = "neutral"
+    usd: ImpactDirection = "neutral"
+    rationale: str = ""
 
 
 class CalendarEvent(BaseModel):
@@ -27,6 +39,7 @@ class CalendarEvent(BaseModel):
     actual: str | None = None
     actual_summary: str | None = None
     status: EventStatus = "SCHEDULED"
+    analysis: EventAnalysis | None = None
 
     @field_validator("scheduled_time")
     @classmethod
