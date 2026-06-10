@@ -11,6 +11,7 @@ import httpx
 import yfinance as yf
 from pydantic import ValidationError
 
+from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import (
     Chamber,
     CongressTrade,
@@ -93,13 +94,13 @@ class CongressTradesService:
             self._task = None
 
     async def refresh_now(self) -> None:
-        async with httpx.AsyncClient(
+        async with make_client(
             headers=_HEADERS, timeout=20.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)
 
     async def _run(self) -> None:
-        async with httpx.AsyncClient(
+        async with make_client(
             headers=_HEADERS, timeout=20.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)

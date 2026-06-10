@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
+from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import Sentiment, StockTwitMessage
 
 
@@ -64,13 +65,13 @@ class StockTwitsService:
             self._task = None
 
     async def refresh_now(self) -> None:
-        async with httpx.AsyncClient(
+        async with make_client(
             headers=_HEADERS, timeout=15.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)
 
     async def _run(self) -> None:
-        async with httpx.AsyncClient(
+        async with make_client(
             headers=_HEADERS, timeout=15.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)
@@ -165,9 +166,7 @@ def _parse_message(raw: Any, source_ticker: str) -> StockTwitMessage | None:
     if created is None:
         return None
     entities = raw.get("entities") or {}
-    sentiment_raw = (
-        entities.get("sentiment") if isinstance(entities, dict) else None
-    )
+    sentiment_raw = entities.get("sentiment") if isinstance(entities, dict) else None
     sentiment: Sentiment | None = None
     if isinstance(sentiment_raw, dict):
         basic = str(sentiment_raw.get("basic") or "").strip().lower()

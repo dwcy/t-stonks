@@ -8,6 +8,7 @@ from datetime import date, datetime, timezone
 import httpx
 import yfinance as yf
 
+from goldsilver.data.http import make_client
 from goldsilver.data.models import Bar, GOLD, SILVER, Tick
 from goldsilver.data.session import stockholm_date_of
 
@@ -221,14 +222,14 @@ class MetalsService:
     async def _run(self) -> None:
         await self._emit_status("connecting")
 
-        async with httpx.AsyncClient(timeout=5.0) as avanza_client:
+        async with make_client(timeout=5.0) as avanza_client:
             await self._refresh_avanza_once(avanza_client)
             self._avanza_refresh_task = asyncio.create_task(
                 self._avanza_refresh_loop(avanza_client),
                 name="avanza-refresh",
             )
             try:
-                async with httpx.AsyncClient(
+                async with make_client(
                     headers=GOLDPRICE_HEADERS, timeout=5.0
                 ) as client:
                     while not self._stop.is_set():

@@ -8,6 +8,7 @@ import httpx
 import yfinance as yf
 from pydantic import ValidationError
 
+from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import CommodityQuote, CommoditySymbol
 
 
@@ -116,7 +117,7 @@ class CommodityService:
     async def _fetch_copper_avanza(self) -> CommodityQuote | None:
         url = AVANZA_INSTRUMENT_URL.format(orderbook_id=AVANZA_COPPER_ORDERBOOK)
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with make_client(timeout=10.0) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 payload = response.json()
