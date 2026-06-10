@@ -35,7 +35,7 @@ def test_fetch_single_prefers_fast_info(monkeypatch: pytest.MonkeyPatch) -> None
         stock_service.yf, "Ticker", lambda _s: _FakeTicker(21.5, 20.75, "CAD")
     )
 
-    quote = stock_service._fetch_single("LUNR.V")
+    quote = stock_service.fetch_single_quote("LUNR.V")
 
     assert quote is not None
     assert quote.price == 21.5
@@ -49,7 +49,7 @@ def test_fetch_single_falls_back_to_intraday(monkeypatch: pytest.MonkeyPatch) ->
         stock_service.yf, "Ticker", lambda _s: _FakeTicker(None, None, "CAD")
     )
 
-    quote = stock_service._fetch_single("LUG.TO")
+    quote = stock_service.fetch_single_quote("LUG.TO")
 
     assert quote is not None
     assert quote.price == 19.50

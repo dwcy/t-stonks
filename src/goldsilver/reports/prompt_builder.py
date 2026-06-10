@@ -15,6 +15,12 @@ _TEMPLATE_PATH = Path(__file__).parent / "prompts" / "analysis_prompt.md"
 _VERSION_PREFIX = "<!-- TEMPLATE_VERSION:"
 
 
+_NO_QUOTE_FALLBACK = (
+    "No reference quote available for this run. Verify the exchange suffix and "
+    "currency of the exact listing with extra care before quoting any price."
+)
+
+
 @dataclass(slots=True)
 class AnalysisPromptContext:
     ticker: str
@@ -24,10 +30,15 @@ class AnalysisPromptContext:
     date: str
     swedish_phase: str
     us_market_state: str
+    reference_quote: str = _NO_QUOTE_FALLBACK
 
     @classmethod
     def for_ticker(
-        cls, ticker: ReportTicker, now_local: datetime
+        cls,
+        ticker: ReportTicker,
+        now_local: datetime,
+        *,
+        reference_quote: str | None = None,
     ) -> "AnalysisPromptContext":
         local = now_local.astimezone(STOCKHOLM)
         return cls(
@@ -38,6 +49,7 @@ class AnalysisPromptContext:
             date=local.strftime("%Y-%m-%d"),
             swedish_phase=swedish_phase(local).value,
             us_market_state=us_market_state(local).value,
+            reference_quote=reference_quote or _NO_QUOTE_FALLBACK,
         )
 
     def _replacements(self) -> dict[str, str]:
@@ -49,6 +61,7 @@ class AnalysisPromptContext:
             "{DATE}": self.date,
             "{SWEDISH_PHASE}": self.swedish_phase,
             "{US_MARKET_STATE}": self.us_market_state,
+            "{REFERENCE_QUOTE}": self.reference_quote,
         }
 
 

@@ -17,12 +17,13 @@ _KNOWN_TOKENS = [
     "{DATE}",
     "{SWEDISH_PHASE}",
     "{US_MARKET_STATE}",
+    "{REFERENCE_QUOTE}",
 ]
 
 
-def _prompt_for(ticker: ReportTicker) -> str:
+def _prompt_for(ticker: ReportTicker, reference_quote: str | None = None) -> str:
     now = datetime(2026, 6, 8, 15, 35, tzinfo=STOCKHOLM)
-    ctx = AnalysisPromptContext.for_ticker(ticker, now)
+    ctx = AnalysisPromptContext.for_ticker(ticker, now, reference_quote=reference_quote)
     return build_prompt(ctx)
 
 
@@ -44,6 +45,20 @@ def test_context_values_present() -> None:
     assert "2026-06-08 15:35" in prompt
     assert "US_INFLUENCE" in prompt  # 15:35 Stockholm phase
     assert "OPENING" in prompt  # 09:35 ET
+
+
+def test_reference_quote_injected() -> None:
+    quote_line = (
+        "Last price for LUG.ST: **515.60 SEK** (previous close 524.00, -1.60%)."
+    )
+    prompt = _prompt_for(ReportTicker.stock("LUG.ST"), reference_quote=quote_line)
+    assert quote_line in prompt
+    assert "Ground Truth" in prompt
+
+
+def test_reference_quote_fallback_when_missing() -> None:
+    prompt = _prompt_for(ReportTicker.stock("LUG.ST"))
+    assert "No reference quote available" in prompt
 
 
 def test_stock_kind_framing() -> None:

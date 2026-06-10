@@ -18,6 +18,10 @@ from goldsilver.reports.models import (
     pinned_metal_tickers,
 )
 from goldsilver.reports.prompt_builder import AnalysisPromptContext, build_prompt
+from goldsilver.reports.reference_quote import (
+    fetch_reference_quote,
+    format_reference_quote,
+)
 
 RunCallback = Callable[[ReportRun], None]
 SettingsProvider = Callable[[], ReportSettings]
@@ -77,7 +81,12 @@ class ReportService:
                 started_at=started,
                 status=ReportStatus.RUNNING,
             )
-            context = AnalysisPromptContext.for_ticker(ticker, started)
+            quote = await fetch_reference_quote(ticker)
+            context = AnalysisPromptContext.for_ticker(
+                ticker,
+                started,
+                reference_quote=format_reference_quote(ticker, quote),
+            )
             prompt = build_prompt(context)
             result = await run_claude(
                 prompt,
