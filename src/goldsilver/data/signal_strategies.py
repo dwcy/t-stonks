@@ -176,22 +176,31 @@ class SlopeMomentum(_WindowBase):
             return cooled
         if len(st.ticks) < self.MIN_SAMPLES:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="warming up", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason="warming up",
+                at=at,
             )
         slope_cutoff = at - timedelta(seconds=self._slope_window_s)
         slope_ticks = [p for t, p in st.ticks if t >= slope_cutoff]
         if len(slope_ticks) < 2:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="no slope window", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason="no slope window",
+                at=at,
             )
         prices = [p for _, p in st.ticks]
         mean, std = _stats(prices)
         if mean == 0.0 or std == 0.0:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="flat", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason="flat",
+                at=at,
             )
         slope = price - slope_ticks[0]
         slope_pct = slope / mean * 100.0
@@ -199,19 +208,33 @@ class SlopeMomentum(_WindowBase):
         reason = f"slope {slope_pct:+.2f}% · z {z:+.1f}"
         if slope_pct > self._slope_pct_thr and z > self._z_align:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="BUY", intensity=abs(z), reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="BUY",
+                intensity=abs(z),
+                reason=reason,
+                at=at,
             )
             return self._fired(st, at, sig)
         if slope_pct < -self._slope_pct_thr and z < -self._z_align:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="SELL", intensity=abs(z), reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="SELL",
+                intensity=abs(z),
+                reason=reason,
+                at=at,
             )
             return self._fired(st, at, sig)
         return _none(
-            symbol=symbol, strategy=self.name, kind=self.kind,
-            reason=reason, at=at, intensity=abs(z),
+            symbol=symbol,
+            strategy=self.name,
+            kind=self.kind,
+            reason=reason,
+            at=at,
+            intensity=abs(z),
         )
 
 
@@ -266,15 +289,21 @@ class BollingerRecoil(_WindowBase):
             return cooled
         if len(st.ticks) < self.MIN_SAMPLES:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="warming up", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason="warming up",
+                at=at,
             )
         prices = [p for _, p in st.ticks]
         mean, std = _stats(prices)
         if std == 0.0:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="flat", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason="flat",
+                at=at,
             )
         upper = mean + self._band_sigma * std
         lower = mean - self._band_sigma * std
@@ -290,19 +319,33 @@ class BollingerRecoil(_WindowBase):
         intensity = abs(pct_b - 0.5) * 2.0
         if pct_b >= self._pct_b_high and slope_pct <= 0.0:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="SELL", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="SELL",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             return self._fired(st, at, sig)
         if pct_b <= self._pct_b_low and slope_pct >= 0.0:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="BUY", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="BUY",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             return self._fired(st, at, sig)
         return _none(
-            symbol=symbol, strategy=self.name, kind=self.kind,
-            reason=reason, at=at, intensity=intensity,
+            symbol=symbol,
+            strategy=self.name,
+            kind=self.kind,
+            reason=reason,
+            at=at,
+            intensity=intensity,
         )
 
 
@@ -343,33 +386,53 @@ class RocMomentum(_WindowBase):
             return cooled
         if len(st.ticks) < self.MIN_SAMPLES:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="warming up", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason="warming up",
+                at=at,
             )
         first_price = st.ticks[0][1]
         if first_price == 0.0:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="flat", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason="flat",
+                at=at,
             )
         roc_pct = (price - first_price) / first_price * 100.0
         reason = f"2m ROC {roc_pct:+.2f}%"
         intensity = abs(roc_pct) / max(self._roc_pct_thr, 1e-9)
         if roc_pct > self._roc_pct_thr:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="BUY", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="BUY",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             return self._fired(st, at, sig)
         if roc_pct < -self._roc_pct_thr:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="SELL", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="SELL",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             return self._fired(st, at, sig)
         return _none(
-            symbol=symbol, strategy=self.name, kind=self.kind,
-            reason=reason, at=at, intensity=intensity,
+            symbol=symbol,
+            strategy=self.name,
+            kind=self.kind,
+            reason=reason,
+            at=at,
+            intensity=intensity,
         )
 
 
@@ -441,8 +504,11 @@ class RsiRecoil:
         st.last_price = price
         if prev is None:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="warming up 1/" + str(self._period + 1), at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason=f"warming up 0/{self._period}",
+                at=at,
             )
         change = price - prev
         gain = change if change > 0 else 0.0
@@ -450,8 +516,11 @@ class RsiRecoil:
         st.ticks.append(change)
         if len(st.ticks) < self._period:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason=f"warming up {len(st.ticks)}/{self._period}", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason=f"warming up {len(st.ticks)}/{self._period}",
+                at=at,
             )
         if st.avg_gain is None or st.avg_loss is None:
             recent = list(st.ticks)[-self._period :]
@@ -472,28 +541,46 @@ class RsiRecoil:
         intensity = abs(rsi - 50.0) / 50.0 * 2.0
         if rsi >= self._rsi_high:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="SELL", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="SELL",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             st.last_fire = (at, sig)
             return sig
         if rsi <= self._rsi_low:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="BUY", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="BUY",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             st.last_fire = (at, sig)
             return sig
         return _none(
-            symbol=symbol, strategy=self.name, kind=self.kind,
-            reason=reason, at=at, intensity=intensity,
+            symbol=symbol,
+            strategy=self.name,
+            kind=self.kind,
+            reason=reason,
+            at=at,
+            intensity=intensity,
         )
 
 
 class _MacdState:
     __slots__ = (
-        "ema_fast", "ema_slow", "signal", "prev_hist",
-        "last_fire", "ticks",
+        "ema_fast",
+        "ema_slow",
+        "signal",
+        "prev_hist",
+        "last_fire",
+        "ticks",
     )
 
     def __init__(self) -> None:
@@ -600,8 +687,11 @@ class MacdMomentum:
         if len(st.ticks) < self.MIN_SAMPLES:
             st.prev_hist = hist
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason=f"warming up {len(st.ticks)}/{self.MIN_SAMPLES}", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason=f"warming up {len(st.ticks)}/{self.MIN_SAMPLES}",
+                at=at,
             )
         eps = self._eps_pct / 100.0 * price
         prev = st.prev_hist if st.prev_hist is not None else hist
@@ -612,21 +702,35 @@ class MacdMomentum:
         st.prev_hist = hist
         if hist > eps and rising:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="BUY", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="BUY",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             st.last_fire = (at, sig)
             return sig
         if hist < -eps and falling:
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="SELL", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="SELL",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             st.last_fire = (at, sig)
             return sig
         return _none(
-            symbol=symbol, strategy=self.name, kind=self.kind,
-            reason=reason, at=at, intensity=intensity,
+            symbol=symbol,
+            strategy=self.name,
+            kind=self.kind,
+            reason=reason,
+            at=at,
+            intensity=intensity,
         )
 
 
@@ -667,62 +771,76 @@ class ZScoreRecoil(_WindowBase):
     def observe(self, symbol: str, price: float, at: datetime) -> Signal:
         at = at.astimezone(timezone.utc)
         st = self._push(symbol, price, at)
-        macd_sig = self._macd.observe(symbol, price, at)
+        macd_state = self._macd._state.get(symbol)
+        # observe() advances prev_hist to the current histogram, so the
+        # previous value must be captured before the call.
+        prev_hist = macd_state.prev_hist if macd_state is not None else None
+        self._macd.observe(symbol, price, at)
         cooled = self._hit_cooldown(st, at)
         if cooled is not None:
             return cooled
         if len(st.ticks) < self.MIN_SAMPLES:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="warming up", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason="warming up",
+                at=at,
             )
         prices = [p for _, p in st.ticks]
         mean, std = _stats(prices)
         if std == 0.0:
             return _none(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                reason="flat", at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                reason="flat",
+                at=at,
             )
         z = (price - mean) / std
-        hist_state = self._macd._state.get(symbol)
-        prev_hist = (
-            hist_state.prev_hist
-            if hist_state is not None and hist_state.prev_hist is not None
-            else None
-        )
-        _macd_core = _MacdCore(
-            self._macd._fast, self._macd._slow, self._macd._signal
-        )
-        _, hist = (0.0, 0.0)
-        if hist_state is not None and hist_state.ema_fast is not None:
-            hist = (hist_state.ema_fast - hist_state.ema_slow) - (
-                hist_state.signal or 0.0
-            )
+        macd_state = self._macd._state.get(symbol)
+        hist = macd_state.prev_hist if macd_state is not None else None
         reason = f"z {z:+.1f}"
         intensity = abs(z)
         if (
             z > self._z_threshold
             and prev_hist is not None
+            and hist is not None
             and hist < prev_hist
         ):
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="SELL", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="SELL",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             return self._fired(st, at, sig)
         if (
             z < -self._z_threshold
             and prev_hist is not None
+            and hist is not None
             and hist > prev_hist
         ):
             sig = _make(
-                symbol=symbol, strategy=self.name, kind=self.kind,
-                action="BUY", intensity=intensity, reason=reason, at=at,
+                symbol=symbol,
+                strategy=self.name,
+                kind=self.kind,
+                action="BUY",
+                intensity=intensity,
+                reason=reason,
+                at=at,
             )
             return self._fired(st, at, sig)
         return _none(
-            symbol=symbol, strategy=self.name, kind=self.kind,
-            reason=reason, at=at, intensity=intensity,
+            symbol=symbol,
+            strategy=self.name,
+            kind=self.kind,
+            reason=reason,
+            at=at,
+            intensity=intensity,
         )
 
 
