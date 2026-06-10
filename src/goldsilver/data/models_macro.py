@@ -11,9 +11,17 @@ EventImportance = Literal["HIGH", "MED", "LOW"]
 EventStatus = Literal["SCHEDULED", "RELEASED", "CANCELLED", "PASSED"]
 SnapshotStatus = Literal["ok", "stale", "unavailable"]
 FxPair = Literal["USDSEK", "CADSEK", "EURSEK"]
-CommoditySymbol = Literal["BRENT", "COPPER", "BTC"]
+CommoditySymbol = Literal["BRENT", "COPPER", "BTC", "DXY"]
 ImpactDirection = Literal["bullish", "bearish", "neutral"]
 SurpriseDirection = Literal["above", "below", "inline", "na"]
+
+
+class RealYieldPoint(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    value: float
+    previous: float | None
+    asof: date
 
 
 class EventAnalysis(BaseModel):

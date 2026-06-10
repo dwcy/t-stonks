@@ -14,11 +14,13 @@ _LABEL: dict[CommoditySymbol, str] = {
     "BRENT": "Oil",
     "COPPER": "Copper",
     "BTC": "BTC",
+    "DXY": "DXY",
 }
 _CURRENCY: dict[CommoditySymbol, str] = {
     "BRENT": "USD",
     "COPPER": "USD",
     "BTC": "USD",
+    "DXY": "USD",
 }
 
 

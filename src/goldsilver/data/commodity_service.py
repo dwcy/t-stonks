@@ -19,8 +19,9 @@ COMMODITY_REFRESH_INTERVAL_S = 60.0
 _YF_SYMBOL: dict[CommoditySymbol, str] = {
     "BRENT": "BZ=F",
     "BTC": "BTC-USD",
+    "DXY": "DX-Y.NYB",
 }
-_ALL_SYMBOLS: tuple[CommoditySymbol, ...] = ("BRENT", "COPPER", "BTC")
+_ALL_SYMBOLS: tuple[CommoditySymbol, ...] = ("BRENT", "COPPER", "BTC", "DXY")
 
 # Copper reads from Avanza (LME 3-month, USD/tonne) like gold/silver, so the value
 # matches the Avanza app — COMEX HG=F is USD/lb and mismatches by the unit factor.

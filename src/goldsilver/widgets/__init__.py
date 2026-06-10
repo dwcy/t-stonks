@@ -18,6 +18,7 @@ from goldsilver.widgets.stock_row import StockRow
 from goldsilver.widgets.stock_tile import StockTile
 from goldsilver.widgets.stocktwits_panel import StockTwitsPanel
 from goldsilver.widgets.trade_simulator import TradeSimulatorScreen
+from goldsilver.widgets.yield_tile import RealYieldTile
 
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "PlotSettingsScreen",
     "PriceChart",
     "RatioTile",
+    "RealYieldTile",
     "ReportWatchlistScreen",
     "StockRow",
     "StockTile",

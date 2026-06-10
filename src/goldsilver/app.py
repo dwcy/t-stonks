@@ -43,6 +43,7 @@ from goldsilver.data.models_macro import (
     InsiderTrade,
     NewsItem,
     OmxSnapshot,
+    RealYieldPoint,
     Signal,
     StockQuote,
     StockTwitMessage,
@@ -62,6 +63,7 @@ from goldsilver.settings_sync import apply_settings_change
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
 from goldsilver.data.trades_service import TradesService
+from goldsilver.data.yields_service import RealYieldService
 from goldsilver.widgets import (
     CalendarEventScreen,
     CalendarPanel,
@@ -78,6 +80,7 @@ from goldsilver.widgets import (
     PlotSettings,
     PlotSettingsScreen,
     RatioTile,
+    RealYieldTile,
     StockRow,
     StockTwitsPanel,
     TradeSimulatorScreen,
@@ -89,8 +92,9 @@ from goldsilver.widgets.chart import ChartKind
 TRUMP_SOURCE = "TRUMP"
 
 _FX_PAIR_IDS: frozenset[str] = frozenset({"USDSEK", "CADSEK", "EURSEK"})
-_COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC"})
+_COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC", "DXY"})
 _RATIO_ID = "RATIO"
+_REAL_YIELD_ID = "REALYIELD"
 
 TIMEFRAMES: list[tuple[str, str, str, str | None]] = [
     ("today", "2d", "1m", "today"),
@@ -142,6 +146,10 @@ class GoldSilverApp(App[None]):
         self._commodity_tiles: dict[CommoditySymbol, CommodityTile] = {}
         self._ratio_tile: RatioTile | None = None
         self._last_tick: dict[str, Tick] = {}
+        self._yield_tile: RealYieldTile | None = None
+        self._last_yield_point: RealYieldPoint | None = None
+        self._yield_received = False
+        self._yields_service = RealYieldService(handler=self._on_real_yield)
         self._calendar_panel: CalendarPanel | None = None
         self._calendar_event_screen: CalendarEventScreen | None = None
         self._service = MetalsService(
@@ -264,6 +272,10 @@ class GoldSilverApp(App[None]):
                         ratio_tile = RatioTile()
                         self._ratio_tile = ratio_tile
                         yield ratio_tile
+                    elif tile_id == _REAL_YIELD_ID:
+                        yield_tile = RealYieldTile()
+                        self._yield_tile = yield_tile
+                        yield yield_tile
             omx = OmxStrip()
             self._omx_strip = omx
             yield omx
@@ -358,6 +370,7 @@ class GoldSilverApp(App[None]):
         self._congress_service.start()
         self._insider_service.start()
         self._stocktwits_service.start()
+        self._yields_service.start()
         self._seed_all()
         if self._settings.simulator.enabled:
             self._start_simulator_replay()
@@ -378,6 +391,7 @@ class GoldSilverApp(App[None]):
         await self._congress_service.stop()
         await self._insider_service.stop()
         await self._stocktwits_service.stop()
+        await self._yields_service.stop()
 
     def _seed_all(self) -> None:
         for symbol in self._panels:
@@ -636,6 +650,15 @@ class GoldSilverApp(App[None]):
             prev = gold.prev_close / silver.prev_close
         self._ratio_tile.apply_ratio(gold.price / silver.price, prev)
 
+    async def _on_real_yield(self, point: RealYieldPoint | None) -> None:
+        self._yield_received = True
+        self._last_yield_point = point
+        self._update_yield_tile()
+
+    def _update_yield_tile(self) -> None:
+        if self._yield_tile is not None and self._yield_received:
+            self._yield_tile.apply_point(self._last_yield_point)
+
     async def _on_fx_rate(self, rate: FxRate) -> None:
         tile = self._fx_tiles.get(rate.pair)
         if tile is not None:
@@ -702,7 +725,10 @@ class GoldSilverApp(App[None]):
         self._fx_tiles.clear()
         self._commodity_tiles.clear()
         self._ratio_tile = None
-        new_widgets: list[FxTile | CommodityTile | RatioTile | Static] = []
+        self._yield_tile = None
+        new_widgets: list[
+            FxTile | CommodityTile | RatioTile | RealYieldTile | Static
+        ] = []
         for i, tile_id in enumerate(self._settings.mini_tiles):
             if i > 0:
                 new_widgets.append(Static("|", classes="mini-sep"))
@@ -720,10 +746,15 @@ class GoldSilverApp(App[None]):
                 rt = RatioTile()
                 self._ratio_tile = rt
                 new_widgets.append(rt)
+            elif tile_id == _REAL_YIELD_ID:
+                yt = RealYieldTile()
+                self._yield_tile = yt
+                new_widgets.append(yt)
         if new_widgets:
             strip.mount(*new_widgets)
         strip.display = bool(new_widgets)
         self._update_ratio_tile()
+        self._update_yield_tile()
 
     def _apply_news_panel(self) -> None:
         if self._news_panel is None:
@@ -965,6 +996,7 @@ class GoldSilverApp(App[None]):
         await self._congress_service.refresh_now()
         await self._insider_service.refresh_now()
         await self._stocktwits_service.refresh_now()
+        await self._yields_service.refresh_now()
         self._seed_all()
 
     def action_cycle_zoom(self) -> None:
