@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from goldsilver.data.signal_strategies import ZScoreRecoil
+from goldsilver.data.signal_strategies import RsiRecoil, ZScoreRecoil
 
 
 def _run_series(strategy: ZScoreRecoil, prices: list[float]) -> list[str]:
@@ -23,6 +23,33 @@ def test_zscore_recoil_fires_buy_on_spike_down_then_recoil() -> None:
     actions = _run_series(strategy, prices)
 
     assert "BUY" in actions
+
+
+def test_zscore_recoil_cooldown_returns_last_fire() -> None:
+    strategy = ZScoreRecoil()
+    strategy.set_param("z_threshold", 1.0)
+    prices = [100.0] * 30 + [99.0, 97.5, 96.0, 95.0] + [98.0, 98.2, 98.4]
+
+    t0 = datetime(2026, 6, 10, 12, 0, tzinfo=timezone.utc)
+    signals = [
+        strategy.observe("XAU", price, t0 + timedelta(seconds=5 * i))
+        for i, price in enumerate(prices)
+    ]
+
+    fired = [s for s in signals if s.action == "BUY"]
+    assert fired
+    after = strategy.observe("XAU", 98.5, t0 + timedelta(seconds=5 * len(prices)))
+    assert after is fired[-1]
+
+
+def test_rsi_warm_up_reason_counts_changes_not_ticks() -> None:
+    strategy = RsiRecoil()
+    at = datetime(2026, 6, 10, 12, 0, tzinfo=timezone.utc)
+
+    first = strategy.observe("XAU", 100.0, at)
+
+    assert first.action == "NONE"
+    assert first.reason == "warming up 0/14"
 
 
 def test_zscore_recoil_no_buy_while_histogram_still_falling() -> None:

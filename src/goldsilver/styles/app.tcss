@@ -78,24 +78,6 @@ MetalPanel > .change-row {
     height: 1;
 }
 
-MetalPanel > .stats-row {
-    height: 1;
-    color: #a0a0b0;
-}
-
-MetalPanel > .indicators-row {
-    height: 1;
-    color: #a0a0b0;
-}
-
-MetalPanel > #signal-rows {
-    height: auto;
-}
-
-MetalPanel .signal-row {
-    height: 1;
-}
-
 #macro-strip {
     layout: horizontal;
     height: 1;
