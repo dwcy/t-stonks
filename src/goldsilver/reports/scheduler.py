@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
 from datetime import datetime
 
@@ -11,6 +12,9 @@ from goldsilver.reports.report_service import ReportService
 
 EnabledProvider = Callable[[], bool]
 IntervalProvider = Callable[[], int]
+ErrorHandler = Callable[[str], None]
+
+_log = logging.getLogger(__name__)
 
 
 def seconds_until_next_boundary(now_local: datetime, interval_minutes: int) -> float:
@@ -33,10 +37,12 @@ class ReportScheduler:
         *,
         enabled: EnabledProvider,
         interval_minutes: IntervalProvider,
+        on_error: ErrorHandler | None = None,
     ) -> None:
         self._service = service
         self._enabled = enabled
         self._interval = interval_minutes
+        self._on_error = on_error
         self._stop = asyncio.Event()
 
     def request_stop(self) -> None:
@@ -56,6 +62,9 @@ class ReportScheduler:
                 continue
             try:
                 await self._service.run_all()
-            except Exception:
-                # A run failure must not kill the scheduler; per-run errors are recorded.
+            except Exception as exc:
+                # A run failure must not kill the scheduler, but it must be visible.
+                _log.exception("scheduled report run failed")
+                if self._on_error is not None:
+                    self._on_error(f"Report run failed: {exc}")
                 continue

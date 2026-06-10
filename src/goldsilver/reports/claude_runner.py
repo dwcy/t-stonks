@@ -15,7 +15,7 @@ from goldsilver.reports.models import ReportStatus, Verdict
 OUTPUT_FORMAT = "text"
 ALLOWED_TOOLS_FLAG = "--allowed-tools"
 
-_VERDICT_RE = re.compile(r"<!--\s*VERDICT:\s*(\{.*?\})\s*-->", re.DOTALL)
+_VERDICT_MARK_RE = re.compile(r"<!--\s*VERDICT:\s*")
 _DOC_START_RE = re.compile(r"<!--\s*VERDICT:|<!doctype html|<html", re.IGNORECASE)
 
 
@@ -52,13 +52,42 @@ def extract_document(text: str) -> str:
     return t
 
 
+def _extract_json_object(text: str, start: int) -> str | None:
+    """Brace-depth scan (string-aware), so a `}` inside a JSON string can't truncate."""
+    if start >= len(text) or text[start] != "{":
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
 def parse_verdict(html: str) -> Verdict | None:
-    match = _VERDICT_RE.search(html)
+    match = _VERDICT_MARK_RE.search(html)
     if not match:
         return None
+    raw = _extract_json_object(html, match.end())
+    if raw is None:
+        return None
     try:
-        data = json.loads(match.group(1))
-        return Verdict.model_validate(data)
+        return Verdict.model_validate(json.loads(raw))
     except (json.JSONDecodeError, ValidationError, TypeError):
         return None
 
