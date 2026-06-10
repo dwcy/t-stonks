@@ -1,3 +1,6 @@
+# > 400 LoC justified: single cohesive plotext chart widget — live/history modes,
+# crosshair, pins, and overlays all mutate one shared render pipeline and view state;
+# splitting would scatter that state across modules with intertwined imports.
 from __future__ import annotations
 
 import math

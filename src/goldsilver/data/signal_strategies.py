@@ -1,3 +1,6 @@
+# > 400 LoC justified: strategy registry — six small strategy classes share the
+# private window/state helpers and must stay co-located with STRATEGY_REGISTRY,
+# which builds and names them; splitting would separate the registry from its members.
 from __future__ import annotations
 
 import math

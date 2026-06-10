@@ -1,7 +1,9 @@
+# > 400 LoC justified: Textual App wiring hub — bindings, compose(), and one
+# callback per data feed must be methods on the single App instance (framework
+# requirement); feature logic is delegated to settings_sync and report_controller.
 from __future__ import annotations
 
 import sys
-import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
@@ -54,15 +56,9 @@ from goldsilver.data.signal_strategies import (
 )
 from goldsilver.data.history_service import HistoryService
 from goldsilver.data.service import POLL_INTERVAL_S
+from goldsilver.report_controller import ReportController
 from goldsilver.reports.claude_runner import find_claude
-from goldsilver.reports.html_writer import (
-    delete_report,
-    load_recent_runs,
-    write_index,
-)
-from goldsilver.reports.models import ReportRun
-from goldsilver.reports.report_service import ReportService
-from goldsilver.reports.scheduler import ReportScheduler
+from goldsilver.settings_sync import apply_settings_change
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
 from goldsilver.data.trades_service import TradesService
@@ -81,7 +77,6 @@ from goldsilver.widgets import (
     OmxStrip,
     PlotSettings,
     PlotSettingsScreen,
-    ReportWatchlistScreen,
     StockRow,
     StockTwitsPanel,
     TradeSimulatorScreen,
@@ -226,15 +221,7 @@ class GoldSilverApp(App[None]):
             settings_persister=self._persist_settings,
             on_enable_changed=self._on_simulator_enabled,
         )
-        self._report_service = ReportService(
-            lambda: self._settings.report,
-            on_run_complete=self._on_report_done,
-        )
-        self._report_runs: list[ReportRun] = load_recent_runs(
-            self._report_service.out_root()
-        )
-        self._report_scheduler: ReportScheduler | None = None
-        self._report_screen: ReportWatchlistScreen | None = None
+        self._reports = ReportController(self)
 
     @property
     def _timeframe_label(self) -> str:
@@ -366,12 +353,10 @@ class GoldSilverApp(App[None]):
         self._seed_all()
         if self._settings.simulator.enabled:
             self._start_simulator_replay()
-        if self._settings.report.enabled:
-            self._start_report_scheduler()
+        self._reports.start_scheduler_if_enabled()
 
     async def on_unmount(self) -> None:
-        if self._report_scheduler is not None:
-            self._report_scheduler.request_stop()
+        self._reports.request_stop()
         await self._service.stop()
         await self._history_service.stop()
         await self._calendar_service.stop()
@@ -854,95 +839,7 @@ class GoldSilverApp(App[None]):
         self.push_screen(TradeSimulatorScreen())
 
     def action_reports(self) -> None:
-        screen = ReportWatchlistScreen(
-            self._settings.report,
-            on_change=self._on_report_settings_change,
-            on_generate=self._action_generate_reports,
-            on_open=self._open_report,
-            on_retry=self._retry_report,
-            on_delete=self._delete_report,
-            recent=self._report_runs[:20],
-            generating=sorted(self._report_service.in_flight()),
-        )
-        self._report_screen = screen
-        self.push_screen(screen, self._on_report_screen_closed)
-
-    def _on_report_screen_closed(self, _result: None) -> None:
-        self._report_screen = None
-
-    def _on_report_settings_change(self) -> None:
-        self._persist_settings()
-        if self._settings.report.enabled and self._report_scheduler is None:
-            self._start_report_scheduler()
-        elif not self._settings.report.enabled and self._report_scheduler is not None:
-            self._report_scheduler.request_stop()
-            self._report_scheduler = None
-
-    def _start_report_scheduler(self) -> None:
-        if self._report_scheduler is not None:
-            return
-        scheduler = ReportScheduler(
-            self._report_service,
-            enabled=lambda: self._settings.report.enabled,
-            interval_minutes=lambda: self._settings.report.interval_minutes,
-            on_error=lambda msg: self.notify(msg, severity="error", timeout=8),
-        )
-        self._report_scheduler = scheduler
-        self.run_worker(
-            scheduler.run_loop(),
-            exclusive=True,
-            group="report-scheduler",
-        )
-
-    def _action_generate_reports(self) -> None:
-        self._run_reports(self._report_service.effective_watchlist(), replace=True)
-
-    def _retry_report(self, symbol: str) -> None:
-        tickers = self._report_service.resolve_tickers([symbol])
-        self._run_reports(tickers, replace=False)
-
-    def _run_reports(self, tickers: list, *, replace: bool) -> None:
-        symbols = [t.symbol for t in tickers]
-        if self._report_screen is not None:
-            if replace:
-                self._report_screen.mark_generating(symbols)
-            else:
-                self._report_screen.add_generating(symbols)
-        self.run_worker(
-            self._generate_reports(list(tickers), symbols),
-            exclusive=False,
-            group="report-generate",
-        )
-
-    async def _generate_reports(self, tickers: list, symbols: list[str]) -> None:
-        self.notify(f"Generating {len(symbols)} report(s)…", timeout=3)
-        runs = await self._report_service.run_all(tickers)
-        if self._report_screen is not None:
-            self._report_screen.clear_generating(symbols)
-        ok = sum(1 for r in runs if r.html_path)
-        self.notify(f"Reports done: {ok}/{len(runs)}", timeout=5)
-
-    def _on_report_done(self, run: ReportRun) -> None:
-        self._report_runs = [r for r in self._report_runs if r.ticker != run.ticker]
-        self._report_runs.insert(0, run)
-        del self._report_runs[50:]
-        if self._report_screen is not None:
-            self._report_screen.mark_done(run)
-
-    def _delete_report(self, run: ReportRun) -> None:
-        root = self._report_service.out_root()
-        delete_report(root, run.html_path)
-        self._report_runs = [r for r in self._report_runs if r is not run]
-        write_index(root)
-
-    def _open_report(self, run: ReportRun) -> None:
-        if not run.html_path:
-            return
-        path = self._report_service.out_root() / run.html_path
-        try:
-            webbrowser.open(path.resolve().as_uri())
-        except OSError:
-            self.notify("Could not open report", severity="error", timeout=5)
+        self._reports.open_screen()
 
     async def _on_simulator_enabled(self) -> None:
         self._start_simulator_replay()
@@ -1109,131 +1006,7 @@ class GoldSilverApp(App[None]):
             pass
 
     def _on_settings_change(self, settings: PlotSettings) -> None:
-        timeframe_changed = settings.timeframe_index != self._timeframe_index
-        feature_changed = (
-            settings.chart_kind != self._chart_kind
-            or settings.show_sma != self._show_sma
-            or settings.show_vwap != self._show_vwap
-            or settings.show_day_refs != self._show_day_refs
-        )
-        dual_changed = settings.show_dual_charts != self._settings.show_dual_charts
-        kind2_changed = settings.chart_kind2 != self._settings.chart_kind2
-        news_changed = (
-            settings.show_news_markets != self._settings.show_news_markets
-            or settings.show_news_trump != self._settings.show_news_trump
-        )
-        congress_changed = (
-            settings.show_congress_trades != self._settings.show_congress_trades
-        )
-        insider_changed = (
-            settings.show_insider_trades != self._settings.show_insider_trades
-        )
-        stocktwits_changed = settings.show_stocktwits != self._settings.show_stocktwits
-        gold_changed = settings.gold_color_name != self._settings.gold_color_name
-        silver_changed = settings.silver_color_name != self._settings.silver_color_name
-        columns_changed = settings.metals_columns != self._settings.metals_columns
-
-        visible_changed = settings.visible_signals != self._settings.visible_signals
-        markers_changed = (
-            settings.marker_momentum_strategy != self._settings.marker_momentum_strategy
-            or settings.marker_recoil_strategy != self._settings.marker_recoil_strategy
-        )
-        mini_tiles_changed = settings.mini_tiles != self._settings.mini_tiles
-        stock_row_visible_changed = (
-            settings.show_stock_row != self._settings.show_stock_row
-        )
-        stock_tickers_changed = settings.stock_tickers != self._settings.stock_tickers
-
-        self._timeframe_index = settings.timeframe_index
-        self._chart_kind = settings.chart_kind
-        self._show_sma = settings.show_sma
-        self._show_vwap = settings.show_vwap
-        self._show_day_refs = settings.show_day_refs
-        self._settings.timeframe_index = settings.timeframe_index
-        self._settings.chart_kind = settings.chart_kind
-        self._settings.show_dual_charts = settings.show_dual_charts
-        self._settings.chart_kind2 = settings.chart_kind2
-        self._settings.show_sma = settings.show_sma
-        self._settings.show_vwap = settings.show_vwap
-        self._settings.show_day_refs = settings.show_day_refs
-        self._settings.show_news_markets = settings.show_news_markets
-        self._settings.show_news_trump = settings.show_news_trump
-        self._settings.show_congress_trades = settings.show_congress_trades
-        self._settings.show_insider_trades = settings.show_insider_trades
-        self._settings.show_stocktwits = settings.show_stocktwits
-        self._settings.show_stock_row = settings.show_stock_row
-        self._settings.gold_color_name = settings.gold_color_name
-        self._settings.silver_color_name = settings.silver_color_name
-        self._settings.metals_columns = settings.metals_columns
-        self._settings.visible_signals = dict(settings.visible_signals)
-        self._settings.marker_momentum_strategy = settings.marker_momentum_strategy
-        self._settings.marker_recoil_strategy = settings.marker_recoil_strategy
-        self._settings.mini_tiles = list(settings.mini_tiles)
-        self._settings.stock_tickers = list(settings.stock_tickers)
-        try:
-            self._settings.save()
-        except OSError:
-            pass
-
-        if news_changed:
-            self._apply_news_panel()
-        if congress_changed and self._congress_panel is not None:
-            self._congress_panel.display = self._settings.show_congress_trades
-        if insider_changed and self._insider_panel is not None:
-            self._insider_panel.display = self._settings.show_insider_trades
-        if stocktwits_changed and self._stocktwits_panel is not None:
-            self._stocktwits_panel.display = self._settings.show_stocktwits
-        if gold_changed:
-            for panel in (self._panels[GOLD], self._dup_panels[GOLD]):
-                panel.set_accent(self._settings.gold_rgb())
-        if silver_changed:
-            for panel in (self._panels[SILVER], self._dup_panels[SILVER]):
-                panel.set_accent(self._settings.silver_rgb())
-        if columns_changed:
-            self._apply_metals_columns()
-        if visible_changed:
-            self._sync_visible_signals()
-        if mini_tiles_changed:
-            self._apply_mini_tiles()
-        if stock_tickers_changed:
-            self._stock_service.set_tickers(list(self._settings.stock_tickers))
-            self._stock_service.start()
-            if self._stock_row is not None:
-                self._stock_row.apply_tickers(list(self._settings.stock_tickers))
-            if self._settings.stock_tickers:
-                self.run_worker(
-                    self._stock_service.refresh_now(),
-                    exclusive=False,
-                    group="stock-refresh",
-                )
-        if (
-            stock_row_visible_changed or stock_tickers_changed
-        ) and self._stock_row is not None:
-            self._stock_row.display = bool(
-                self._settings.show_stock_row and self._settings.stock_tickers
-            )
-
-        if dual_changed:
-            for panel in self._dup_panels.values():
-                panel.display = self._settings.show_dual_charts
-
-        if timeframe_changed:
-            self._refresh_status_bar()
-            self._seed_all()
-            return
-        if dual_changed and self._settings.show_dual_charts:
-            self._seed_all()
-        elif feature_changed or kind2_changed:
-            for symbol in self._panels:
-                for panel, kind in self._symbol_panels_with_kind(symbol):
-                    panel.apply_chart_features(
-                        chart_kind=kind,
-                        show_sma=self._show_sma,
-                        show_vwap=self._show_vwap,
-                        show_day_refs=self._show_day_refs,
-                    )
-        if markers_changed:
-            self._seed_all()
+        apply_settings_change(self, settings)
 
     def _apply_param_overrides(self) -> None:
         for strategy in self._strategies:
