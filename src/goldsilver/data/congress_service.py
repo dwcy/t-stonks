@@ -322,11 +322,26 @@ def _parse_date(value: Any) -> datetime | None:
     return None
 
 
+_MISSING_RETRY = timedelta(hours=1)
+_CACHE_TTL = timedelta(hours=24)
+
+
 class ReturnsCalculator:
     def __init__(self) -> None:
         self._cache: dict[str, dict[date, float]] = {}
         self._latest: dict[str, float] = {}
-        self._missing: set[str] = set()
+        self._missing: dict[str, datetime] = {}
+        self._fetched_at: dict[str, datetime] = {}
+
+    def _expire(self, now: datetime) -> None:
+        for tk, at in list(self._missing.items()):
+            if now - at >= _MISSING_RETRY:
+                del self._missing[tk]
+        for tk, at in list(self._fetched_at.items()):
+            if now - at >= _CACHE_TTL:
+                self._cache.pop(tk, None)
+                self._latest.pop(tk, None)
+                del self._fetched_at[tk]
 
     async def compute(
         self, trades: list[CongressTrade]
@@ -341,19 +356,19 @@ class ReturnsCalculator:
             cur = earliest.get(t.ticker)
             if cur is None or d < cur:
                 earliest[t.ticker] = d
+        now = datetime.now(timezone.utc)
+        self._expire(now)
         to_fetch = [
-            tk for tk in tickers
-            if tk not in self._cache and tk not in self._missing
+            tk for tk in tickers if tk not in self._cache and tk not in self._missing
         ]
         if to_fetch:
-            fetched = await asyncio.to_thread(
-                _fetch_history_batch, to_fetch, earliest
-            )
+            fetched = await asyncio.to_thread(_fetch_history_batch, to_fetch, earliest)
             for tk, closes in fetched.items():
                 if not closes:
-                    self._missing.add(tk)
+                    self._missing[tk] = now
                     continue
                 self._cache[tk] = closes
+                self._fetched_at[tk] = now
                 last_date = max(closes.keys())
                 self._latest[tk] = closes[last_date]
         out: dict[tuple[str, str, datetime], float | None] = {}
@@ -423,9 +438,8 @@ def _close_on_or_after(closes: dict[date, float], target: date) -> float | None:
     later = sorted(d for d in closes.keys() if d >= target)
     if later:
         return closes[later[0]]
-    earlier = sorted((d for d in closes.keys() if d < target), reverse=True)
-    if earlier:
-        return closes[earlier[0]]
+    # No close on/after the trade date yet: an earlier close would equal
+    # "current" and fake a 0% return, so report no data instead.
     return None
 
 
