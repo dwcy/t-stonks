@@ -16,6 +16,7 @@ from goldsilver.data import (
     CalendarService,
     CommodityService,
     CongressTradesService,
+    FuturesService,
     FxService,
     InsiderTradesService,
     MetalsService,
@@ -43,6 +44,7 @@ from goldsilver.data.models_macro import (
     StockQuote,
     StockTwitMessage,
 )
+from goldsilver.data.models_futures import FuturesSnapshot
 from goldsilver.data.settings import AppSettings
 from goldsilver.data.signal_strategies import (
     SignalStrategy,
@@ -52,7 +54,11 @@ from goldsilver.data.signal_strategies import (
 from goldsilver.data.history_service import HistoryService
 from goldsilver.data.service import POLL_INTERVAL_S
 from goldsilver.reports.claude_runner import find_claude
-from goldsilver.reports.html_writer import delete_report, write_index
+from goldsilver.reports.html_writer import (
+    delete_report,
+    load_recent_runs,
+    write_index,
+)
 from goldsilver.reports.models import ReportRun
 from goldsilver.reports.report_service import ReportService
 from goldsilver.reports.scheduler import ReportScheduler
@@ -66,6 +72,7 @@ from goldsilver.widgets import (
     CongressPanel,
     DisconnectScreen,
     EditMathScreen,
+    FuturesStrip,
     FxTile,
     InsiderPanel,
     MetalPanel,
@@ -166,6 +173,8 @@ class GoldSilverApp(App[None]):
             handler=self._on_omx,
             stale_handler=self._on_omx_stale,
         )
+        self._futures_strip: FuturesStrip | None = None
+        self._futures_service = FuturesService(handler=self._on_futures)
         self._stock_row: StockRow | None = None
         self._stock_service = StockService(
             tickers=list(self._settings.stock_tickers),
@@ -219,7 +228,9 @@ class GoldSilverApp(App[None]):
             lambda: self._settings.report,
             on_run_complete=self._on_report_done,
         )
-        self._report_runs: list[ReportRun] = []
+        self._report_runs: list[ReportRun] = load_recent_runs(
+            self._report_service.out_root()
+        )
         self._report_scheduler: ReportScheduler | None = None
         self._report_screen: ReportWatchlistScreen | None = None
 
@@ -259,6 +270,9 @@ class GoldSilverApp(App[None]):
             omx = OmxStrip()
             self._omx_strip = omx
             yield omx
+            futures = FuturesStrip()
+            self._futures_strip = futures
+            yield futures
             stock_row = StockRow(list(self._settings.stock_tickers))
             self._stock_row = stock_row
             if not self._settings.show_stock_row or not self._settings.stock_tickers:
@@ -342,6 +356,7 @@ class GoldSilverApp(App[None]):
         self._news_service.start()
         self._trump_service.start()
         self._omx_service.start()
+        self._futures_service.start()
         self._stock_service.start()
         self._congress_service.start()
         self._insider_service.start()
@@ -363,6 +378,7 @@ class GoldSilverApp(App[None]):
         await self._news_service.stop()
         await self._trump_service.stop()
         await self._omx_service.stop()
+        await self._futures_service.stop()
         await self._stock_service.stop()
         await self._congress_service.stop()
         await self._insider_service.stop()
@@ -482,6 +498,7 @@ class GoldSilverApp(App[None]):
         week_avg = sum(b.close for b in week) / len(week)
         month_avg = sum(b.close for b in month) / len(month)
         year_avg = sum(b.close for b in year) / len(year)
+        ma200 = sum(b.close for b in bars[-200:]) / 200 if len(bars) >= 200 else None
         for panel in panels:
             panel.set_stats(
                 week_high=week_high,
@@ -489,6 +506,7 @@ class GoldSilverApp(App[None]):
                 week_avg=week_avg,
                 month_avg=month_avg,
                 year_avg=year_avg,
+                ma200=ma200,
             )
 
     async def _on_tick(self, tick: Tick) -> None:
@@ -709,6 +727,14 @@ class GoldSilverApp(App[None]):
     async def _on_omx_stale(self, since: datetime) -> None:
         if self._omx_strip is not None:
             self._omx_strip.mark_stale(since)
+
+    async def _on_futures(self, snapshot: FuturesSnapshot) -> None:
+        if self._futures_strip is None:
+            return
+        if snapshot.status == "ok" and snapshot.quotes:
+            self._futures_strip.apply_snapshot(snapshot)
+        else:
+            self._futures_strip.mark_stale(snapshot.fetched_at)
 
     async def _on_stock_quotes(self, quotes: list[StockQuote]) -> None:
         if self._stock_row is not None:

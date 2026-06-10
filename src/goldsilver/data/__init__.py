@@ -5,6 +5,7 @@ from goldsilver.data.congress_service import (
     ReturnsCalculator,
     compute_politician_stats,
 )
+from goldsilver.data.futures_service import FuturesService
 from goldsilver.data.fx_service import FxService
 from goldsilver.data.insider_service import InsiderTradesService
 from goldsilver.data.models import Bar, Tick
@@ -37,6 +38,7 @@ __all__ = [
     "CommodityService",
     "CongressTrade",
     "CongressTradesService",
+    "FuturesService",
     "FxRate",
     "FxService",
     "InsiderTrade",

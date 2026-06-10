@@ -38,3 +38,22 @@ def test_presstv_url_date_fallback_not_future() -> None:
     items = _parse_rss(ET.fromstring(xml), "PressTV")
 
     assert items[0].published <= _now()
+
+
+def test_presstv_date_only_items_descend_from_build_time() -> None:
+    today = _now()
+    build = today - timedelta(minutes=30)
+    build_str = build.strftime("%a, %d %b %Y %H:%M:%S %z")
+    date_path = f"{today.year}/{today.month:02d}/{today.day:02d}"
+    xml = (
+        "<rss><channel>"
+        f"<lastBuildDate>{build_str}</lastBuildDate>"
+        f"<item><title>First</title><link>https://presstv.ir/Detail/{date_path}/2/a</link></item>"
+        f"<item><title>Second</title><link>https://presstv.ir/Detail/{date_path}/1/b</link></item>"
+        "</channel></rss>"
+    )
+    items = _parse_rss(ET.fromstring(xml), "PressTV")
+
+    assert items[0].published > items[1].published
+    assert abs((items[0].published - build).total_seconds()) < 1
+    assert all(i.published <= _now() for i in items)

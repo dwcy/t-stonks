@@ -102,6 +102,14 @@ def _load_runs(out_root: Path) -> list[ReportRun]:
     return runs
 
 
+def load_recent_runs(out_root: Path, limit: int = 50) -> list[ReportRun]:
+    """Read persisted sidecars newest-first so the UI survives restarts."""
+    if not out_root.is_dir():
+        return []
+    runs = sorted(_load_runs(out_root), key=lambda r: r.started_at, reverse=True)
+    return runs[:limit]
+
+
 def _badge(run: ReportRun) -> str:
     if run.status not in (ReportStatus.SUCCESS, ReportStatus.MALFORMED):
         return f"<span class='badge fail'>{run.status.value}</span>"

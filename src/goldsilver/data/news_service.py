@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from xml.etree import ElementTree as ET
 
@@ -299,6 +299,19 @@ def _parse_pub_date(value: str) -> datetime | None:
     return dt
 
 
+def _feed_time(root: ET.Element, now: datetime) -> datetime:
+    channel = root.find("channel")
+    if channel is not None:
+        raw = (
+            channel.findtext("lastBuildDate") or channel.findtext("pubDate") or ""
+        ).strip()
+        if raw:
+            dt = _parse_pub_date(raw)
+            if dt is not None:
+                return min(dt, now)
+    return now
+
+
 def _parse_rss(
     root: ET.Element,
     source: NewsSource,
@@ -307,6 +320,8 @@ def _parse_rss(
 ) -> list[NewsItem]:
     items: list[NewsItem] = []
     now = datetime.now(timezone.utc)
+    feed_time = _feed_time(root, now)
+    stagger = 0
     for item in root.iter("item"):
         title = (item.findtext("title") or "").strip()
         link = (item.findtext("link") or "").strip()
@@ -325,6 +340,9 @@ def _parse_rss(
         published = _parse_pub_date(pub_text) if pub_text else None
         if published is None:
             published = _date_from_url(link)
+            if published is not None and published.date() == feed_time.date():
+                published = feed_time - timedelta(minutes=stagger)
+                stagger += 1
         if published is None:
             published = now
         if published > now:

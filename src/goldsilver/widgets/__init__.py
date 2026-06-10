@@ -5,6 +5,7 @@ from goldsilver.widgets.commodity_tile import CommodityTile
 from goldsilver.widgets.congress_panel import CongressPanel
 from goldsilver.widgets.disconnect import DisconnectScreen
 from goldsilver.widgets.edit_math import EditMathScreen, build_edit_data
+from goldsilver.widgets.futures_strip import FuturesStrip
 from goldsilver.widgets.fx_tile import FxTile
 from goldsilver.widgets.insider_panel import InsiderPanel
 from goldsilver.widgets.metal_panel import MetalPanel
@@ -25,6 +26,7 @@ __all__ = [
     "CongressPanel",
     "DisconnectScreen",
     "EditMathScreen",
+    "FuturesStrip",
     "FxTile",
     "InsiderPanel",
     "MetalPanel",

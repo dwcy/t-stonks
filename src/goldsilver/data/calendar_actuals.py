@@ -7,12 +7,17 @@ import json
 import re
 from datetime import datetime, timedelta
 
+from typing import cast
+
 from pydantic import BaseModel, ValidationError
 
 from goldsilver.data.models_macro import (
     CalendarDay,
     CalendarEvent,
     CalendarSnapshot,
+    EventAnalysis,
+    ImpactDirection,
+    SurpriseDirection,
 )
 from goldsilver.data.session import STOCKHOLM
 from goldsilver.reports.claude_runner import ClaudeResult, run_claude
@@ -24,12 +29,47 @@ FETCHABLE_IMPORTANCE: frozenset[str] = frozenset({"HIGH", "MED"})
 _RELEASED_RE = re.compile(r"<!--\s*RELEASED:\s*(\{.*?\})\s*-->", re.DOTALL)
 
 
+class ReleasedAnalysis(BaseModel):
+    surprise: str | None = None
+    gold: str | None = None
+    silver: str | None = None
+    usd: str | None = None
+    rationale: str | None = None
+
+
 class ReleasedFigures(BaseModel):
     found: bool = False
     actual: str | None = None
     forecast: str | None = None
     previous: str | None = None
     summary: str | None = None
+    analysis: ReleasedAnalysis | None = None
+
+
+_DIRECTIONS: frozenset[str] = frozenset({"bullish", "bearish", "neutral"})
+_SURPRISES: frozenset[str] = frozenset({"above", "below", "inline", "na"})
+
+
+def _direction(value: str | None) -> ImpactDirection:
+    cleaned = (value or "").strip().lower()
+    return cast(ImpactDirection, cleaned) if cleaned in _DIRECTIONS else "neutral"
+
+
+def _surprise(value: str | None) -> SurpriseDirection:
+    cleaned = (value or "").strip().lower()
+    return cast(SurpriseDirection, cleaned) if cleaned in _SURPRISES else "na"
+
+
+def _to_analysis(raw: ReleasedAnalysis | None) -> EventAnalysis | None:
+    if raw is None:
+        return None
+    return EventAnalysis(
+        surprise=_surprise(raw.surprise),
+        gold=_direction(raw.gold),
+        silver=_direction(raw.silver),
+        usd=_direction(raw.usd),
+        rationale=(raw.rationale or "").strip(),
+    )
 
 
 def build_actuals_prompt(event: CalendarEvent) -> str:
@@ -46,13 +86,23 @@ def build_actuals_prompt(event: CalendarEvent) -> str:
         "previous value. For a rate decision, the 'actual' is the new policy rate (or "
         "the decision, e.g. 'hold 4.25%'). Keep each value short (e.g. '3.2%', "
         "'+250k', '4.25%'). Write a one-sentence plain-language summary.\n\n"
+        "Then assess the market impact of THIS print in isolation. Compare the actual "
+        'to the consensus to set "surprise" to above, below, or inline. Give the '
+        "likely directional impact on gold, silver, and the US dollar as bullish, "
+        "bearish, or neutral (e.g. a hotter-than-expected CPI is usd bullish and gold "
+        "bearish via higher-for-longer rate expectations; metals are non-yielding and "
+        "move inversely to real yields and the dollar). Write a one- or two-sentence "
+        "rationale naming the transmission to the dollar and to the metals.\n\n"
         "If the release has not actually happened yet or you cannot confirm the figures "
         'from a primary source, set "found": false and leave the values null.\n\n'
         "Output ONLY a single HTML comment on its own line, nothing else, exactly in "
         "this form:\n"
         '<!-- RELEASED: {"found": true, "actual": "3.2%", "forecast": "3.1%", '
         '"previous": "3.0%", "summary": "Headline CPI rose 3.2% y/y, above the 3.1% '
-        'consensus."} -->'
+        'consensus.", "analysis": {"surprise": "above", "gold": "bearish", '
+        '"silver": "bearish", "usd": "bullish", "rationale": "A hotter CPI lifts '
+        "rate-cut-delay odds, supporting the dollar and pressuring non-yielding gold "
+        'and silver."}} -->'
     )
 
 
@@ -74,6 +124,7 @@ def _merge(event: CalendarEvent, figures: ReleasedFigures) -> CalendarEvent:
             "forecast": figures.forecast or event.forecast,
             "previous": figures.previous or event.previous,
             "actual_summary": figures.summary,
+            "analysis": _to_analysis(figures.analysis),
             "status": "RELEASED",
         }
     )
