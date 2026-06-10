@@ -98,6 +98,14 @@ class ReportService:
                 timeout_seconds=settings.timeout_seconds,
                 claude_path=self._claude_path,
             )
+            # One retry on transient failures; CLI_MISSING won't fix itself.
+            if result.status in (ReportStatus.TIMEOUT, ReportStatus.ERROR):
+                result = await run_claude(
+                    prompt,
+                    allowed_tools=list(settings.allowed_tools),
+                    timeout_seconds=settings.timeout_seconds,
+                    claude_path=self._claude_path,
+                )
             run.status = result.status
             run.verdict = result.verdict
             run.error = result.error
