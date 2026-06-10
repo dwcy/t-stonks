@@ -272,6 +272,9 @@ class AppSettings:
     )
     marker_momentum_strategy: str = ""
     marker_recoil_strategy: str = ""
+    price_alerts: dict[str, list[float]] = field(default_factory=dict)
+    beep_on_buy: bool = False
+    beep_on_sell: bool = False
     simulator: SimulatorSettings = field(default_factory=SimulatorSettings)
     report: ReportSettings = field(default_factory=ReportSettings)
     calendar: CalendarSettings = field(default_factory=CalendarSettings)
@@ -340,6 +343,23 @@ class AppSettings:
                 str(k): float(v) for k, v in kv.items() if isinstance(v, (int, float))
             }
         self.signal_params = clean_params
+        clean_alerts: dict[str, list[float]] = {}
+        if isinstance(self.price_alerts, dict):
+            for sym, levels in self.price_alerts.items():
+                if sym not in ("XAU", "XAG") or not isinstance(levels, list):
+                    continue
+                vals = sorted(
+                    {
+                        float(v)
+                        for v in levels
+                        if isinstance(v, (int, float)) and float(v) > 0
+                    }
+                )
+                if vals:
+                    clean_alerts[sym] = vals
+        self.price_alerts = clean_alerts
+        self.beep_on_buy = bool(self.beep_on_buy)
+        self.beep_on_sell = bool(self.beep_on_sell)
         if not isinstance(self.simulator, SimulatorSettings):
             if isinstance(self.simulator, dict):
                 allowed_sim = {f.name for f in fields(SimulatorSettings)}

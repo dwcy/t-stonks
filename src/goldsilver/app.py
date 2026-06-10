@@ -60,11 +60,13 @@ from goldsilver.data.service import POLL_INTERVAL_S
 from goldsilver.report_controller import ReportController
 from goldsilver.reports.claude_runner import find_claude
 from goldsilver.settings_sync import apply_settings_change
+from goldsilver.data.alerts import PriceAlertEngine
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
 from goldsilver.data.trades_service import TradesService
 from goldsilver.data.yields_service import RealYieldService
 from goldsilver.widgets import (
+    AlertsScreen,
     CalendarEventScreen,
     CalendarPanel,
     CommodityTile,
@@ -125,6 +127,7 @@ class GoldSilverApp(App[None]):
         Binding("p", "plot_settings", "Settings"),
         Binding("t", "trade_simulator", "Trade Sim"),
         Binding("g", "reports", "Reports"),
+        Binding("a", "alerts", "Alerts"),
         Binding("r", "refresh", "Refresh"),
         Binding("z", "cycle_zoom", "Zoom"),
         Binding("h", "cycle_chart_mode", "Mode"),
@@ -150,6 +153,7 @@ class GoldSilverApp(App[None]):
         self._last_yield_point: RealYieldPoint | None = None
         self._yield_received = False
         self._yields_service = RealYieldService(handler=self._on_real_yield)
+        self._alert_engine = PriceAlertEngine()
         self._calendar_panel: CalendarPanel | None = None
         self._calendar_event_screen: CalendarEventScreen | None = None
         self._service = MetalsService(
@@ -523,6 +527,7 @@ class GoldSilverApp(App[None]):
         self._last_price[tick.symbol] = (tick.price, tick.time)
         self._last_tick[tick.symbol] = tick
         self._update_ratio_tile()
+        self._check_price_alerts(tick)
         panels = self._symbol_panels(tick.symbol)
         mom: Signal | None = None
         rec: Signal | None = None
@@ -565,6 +570,10 @@ class GoldSilverApp(App[None]):
             actions.add(rec.action)
         if not actions:
             return
+        if "BUY" in actions and self._settings.beep_on_buy:
+            self.bell()
+        if "SELL" in actions and self._settings.beep_on_sell:
+            self.bell()
         both_buy = (
             mom_fresh and rec_fresh and mom.action == "BUY" and rec.action == "BUY"
         )
@@ -637,6 +646,24 @@ class GoldSilverApp(App[None]):
             screen.update_event(updated)
         else:
             screen.set_status("No released figures found yet.", style="#ff9b6b")
+
+    def _check_price_alerts(self, tick: Tick) -> None:
+        levels = self._settings.price_alerts.get(tick.symbol)
+        if not levels:
+            return
+        for level, crossed_up in self._alert_engine.check(
+            tick.symbol, tick.price, levels
+        ):
+            direction = "above" if crossed_up else "below"
+            self.notify(
+                f"{tick.symbol} crossed {direction} {level:g} ({tick.price:.2f})",
+                severity="warning",
+                timeout=10,
+            )
+            self.bell()
+
+    def action_alerts(self) -> None:
+        self.push_screen(AlertsScreen(self._settings, on_change=self._persist_settings))
 
     def _update_ratio_tile(self) -> None:
         if self._ratio_tile is None:

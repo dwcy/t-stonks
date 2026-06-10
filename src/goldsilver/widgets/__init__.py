@@ -1,3 +1,4 @@
+from goldsilver.widgets.alerts_screen import AlertsScreen
 from goldsilver.widgets.calendar_event_screen import CalendarEventScreen
 from goldsilver.widgets.calendar_panel import CalendarPanel
 from goldsilver.widgets.chart import PriceChart
@@ -22,6 +23,7 @@ from goldsilver.widgets.yield_tile import RealYieldTile
 
 
 __all__ = [
+    "AlertsScreen",
     "CalendarEventScreen",
     "CalendarPanel",
     "CommodityTile",
