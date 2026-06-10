@@ -9,6 +9,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from goldsilver.data.models_macro import CongressTrade, PoliticianStats
+from goldsilver.widgets.format import format_age
 
 
 _PARTY_STYLE = {
@@ -24,9 +25,22 @@ _CHAMBER_LABEL = {
 
 
 _NAME_SUFFIXES = (
-    " Incorporated", " Corporation", " Holdings Inc", " Holdings",
-    " Group Inc", " Company", " Inc", " Corp", " Co", " Ltd", " Plc",
-    " LP", " LLC", " SA", " AG", " NV",
+    " Incorporated",
+    " Corporation",
+    " Holdings Inc",
+    " Holdings",
+    " Group Inc",
+    " Company",
+    " Inc",
+    " Corp",
+    " Co",
+    " Ltd",
+    " Plc",
+    " LP",
+    " LLC",
+    " SA",
+    " AG",
+    " NV",
 )
 
 
@@ -39,22 +53,6 @@ def _short_name(name: str, *, max_chars: int = 18) -> str:
     if len(cleaned) > max_chars:
         cleaned = cleaned[: max_chars - 1].rstrip() + "…"
     return cleaned
-
-
-def _format_age(seconds: int) -> str:
-    if seconds < 0:
-        seconds = 0
-    if seconds < 60:
-        return f"{seconds}s"
-    if seconds < 3600:
-        return f"{seconds // 60}m"
-    if seconds < 86400:
-        h, rem = divmod(seconds, 3600)
-        m = rem // 60
-        return f"{h}h" if m == 0 else f"{h}h {m}m"
-    d, rem = divmod(seconds, 86400)
-    h = rem // 3600
-    return f"{d}d" if h == 0 else f"{d}d {h}h"
 
 
 class CongressPanel(VerticalScroll):
@@ -98,9 +96,7 @@ class CongressPanel(VerticalScroll):
     def watch_stats(self, _: tuple[PoliticianStats, ...]) -> None:
         self._redraw()
 
-    def watch_returns(
-        self, _: dict[tuple[str, str, datetime], float | None]
-    ) -> None:
+    def watch_returns(self, _: dict[tuple[str, str, datetime], float | None]) -> None:
         self._redraw()
 
     def watch_stale_since(self, _: datetime | None) -> None:
@@ -124,8 +120,7 @@ class CongressPanel(VerticalScroll):
         elif self.trades:
             latest = max(t.traded_at for t in self.trades).astimezone()
             self.border_subtitle = (
-                f"latest {latest.strftime('%b %d')} · "
-                f"mark-to-now, BUY-side only"
+                f"latest {latest.strftime('%b %d')} · mark-to-now, BUY-side only"
             )
         else:
             self.border_subtitle = ""
@@ -166,9 +161,7 @@ class CongressPanel(VerticalScroll):
             style="#a0a0b0",
         )
         if s.win_rate_pct is not None:
-            text.append(
-                f"  win {s.win_rate_pct:.0f}%\n", style="dim #a0a0b0"
-            )
+            text.append(f"  win {s.win_rate_pct:.0f}%\n", style="dim #a0a0b0")
         else:
             text.append("\n", style="")
 
@@ -178,16 +171,16 @@ class CongressPanel(VerticalScroll):
         for t in self.trades:
             self._render_trade(text, t, now)
 
-    def _render_trade(
-        self, text: Text, t: CongressTrade, now: datetime
-    ) -> None:
+    def _render_trade(self, text: Text, t: CongressTrade, now: datetime) -> None:
         party_style = _PARTY_STYLE.get(t.party, "#a0a0b0")
         chamber = _CHAMBER_LABEL.get(t.chamber, "?")
         date_str = t.traded_at.astimezone().strftime("%m-%d")
-        age = _format_age(int((now - t.traded_at).total_seconds()))
+        age = format_age(int((now - t.traded_at).total_seconds()))
         side_style = (
-            "#7dff8c" if t.side == "BUY"
-            else "#ff6b6b" if t.side == "SELL"
+            "#7dff8c"
+            if t.side == "BUY"
+            else "#ff6b6b"
+            if t.side == "SELL"
             else "#ffd56b"
         )
         text.append(f"{date_str} ", style="#7a7a8a")
@@ -204,8 +197,6 @@ class CongressPanel(VerticalScroll):
         if ret is None:
             text.append("   —  ", style="dim #5a5a6a")
         else:
-            ret_style = (
-                "#7dff8c" if ret > 0 else "#ff6b6b" if ret < 0 else "#a0a0b0"
-            )
+            ret_style = "#7dff8c" if ret > 0 else "#ff6b6b" if ret < 0 else "#a0a0b0"
             text.append(f"{ret:+6.1f}%", style=f"bold {ret_style}")
         text.append("\n", style="")
