@@ -103,7 +103,7 @@ def _fetch_batch(tickers: list[str]) -> list[StockQuote]:
 def _fetch_single(sym: str) -> StockQuote | None:
     try:
         ticker = yf.Ticker(sym)
-        intraday = ticker.history(period="2d", interval="5m")
+        intraday = ticker.history(period="5d", interval="5m")
     except Exception:
         return None
     if intraday is None or len(intraday) == 0:
