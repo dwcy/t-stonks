@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time as time_mod
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timezone
 
@@ -35,6 +36,8 @@ AVANZA_ORDERBOOK = {GOLD: "18986", SILVER: "18991"}
 HISTORICAL_SYMBOL = {GOLD: "GC=F", SILVER: "SI=F"}
 POLL_INTERVAL_S = 5.0
 AVANZA_REFRESH_INTERVAL_S = 30.0
+# Polls can keep succeeding while upstream serves a frozen timestamp; flag it.
+STALE_AFTER_FACTOR = 4.0
 
 
 class _AvanzaSession:
@@ -66,6 +69,8 @@ class MetalsService:
         self._live_low: dict[str, float] = {}
         self._live_session_date: date | None = None
         self._avanza_refresh_task: asyncio.Task[None] | None = None
+        self._last_payload_mono: float | None = None
+        self._stale_notified = False
 
     async def fetch_history(
         self, symbol: str, period: str = "1d", interval: str = "1m"
@@ -166,6 +171,8 @@ class MetalsService:
             self._live_high.clear()
             self._live_low.clear()
             self._live_session_date = None
+            self._last_payload_mono = None
+            self._stale_notified = False
             self._task = asyncio.create_task(self._run(), name="metals-poll")
 
     async def stop(self) -> None:
@@ -184,6 +191,14 @@ class MetalsService:
             except (asyncio.CancelledError, Exception):
                 pass
             self._task = None
+
+    def _stale_due(self, now_mono: float) -> bool:
+        if self._last_payload_mono is None or self._stale_notified:
+            return False
+        return (
+            now_mono - self._last_payload_mono
+            >= self._poll_interval_s * STALE_AFTER_FACTOR
+        )
 
     async def _emit_status(self, status: str) -> None:
         if self._status_handler is None:
@@ -215,6 +230,8 @@ class MetalsService:
         self._last_ts = ts
         time = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
 
+        self._last_payload_mono = time_mod.monotonic()
+        self._stale_notified = False
         await self._emit_status("connected")
         await self._emit_tick(self._make_tick(GOLD, gold_price, time))
         await self._emit_tick(self._make_tick(SILVER, silver_price, time))
@@ -246,6 +263,10 @@ class MetalsService:
                         except Exception:
                             _log.exception("tick pipeline failed")
                             await self._emit_status("reconnecting")
+
+                        if self._stale_due(time_mod.monotonic()):
+                            self._stale_notified = True
+                            await self._emit_status("stale")
 
                         try:
                             await asyncio.wait_for(

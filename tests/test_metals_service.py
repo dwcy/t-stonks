@@ -34,6 +34,17 @@ def test_make_tick_uses_avanza_baseline_for_change() -> None:
     assert tick.day_low == 2380.0
 
 
+def test_stale_due_after_four_quiet_poll_intervals() -> None:
+    service = MetalsService(poll_interval_s=5.0)
+
+    assert not service._stale_due(100.0)  # no payload ever accepted
+    service._last_payload_mono = 100.0
+    assert not service._stale_due(119.9)
+    assert service._stale_due(120.0)
+    service._stale_notified = True
+    assert not service._stale_due(500.0)  # only notify once per stall
+
+
 def test_make_tick_resets_high_low_after_stockholm_midnight() -> None:
     service = MetalsService()
     before_midnight = datetime(2026, 6, 10, 20, 0, tzinfo=timezone.utc)

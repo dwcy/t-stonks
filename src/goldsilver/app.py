@@ -107,6 +107,7 @@ STATUS_STYLES = {
     "connecting": "#ffd56b",
     "connected": "#7dff8c",
     "reconnecting": "#ff9b6b",
+    "stale": "#ffd56b",
 }
 
 
