@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
 from goldsilver.data import calendar_actuals, calendar_service
+from goldsilver.data.calendar_actuals_store import CalendarActualsStore
 from goldsilver.data.calendar_service import CalendarService
 from goldsilver.data.models_macro import CalendarDay, CalendarEvent, CalendarSnapshot
 from goldsilver.data.settings import CalendarSettings
@@ -38,7 +40,9 @@ def _snapshot_with_passed_high() -> CalendarSnapshot:
 
 
 @pytest.mark.asyncio
-async def test_check_due_fills_passed_event(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_check_due_fills_passed_event(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     async def fake_run_claude(*_args: object, **_kwargs: object) -> ClaudeResult:
         return ClaudeResult(status=ReportStatus.SUCCESS, html=_SAMPLE)
 
@@ -53,6 +57,7 @@ async def test_check_due_fills_passed_event(monkeypatch: pytest.MonkeyPatch) -> 
     service = CalendarService(
         handler=handler,
         actuals_settings_provider=lambda: CalendarSettings(actuals_enabled=True),
+        actuals_store=CalendarActualsStore(tmp_path / "actuals.json"),
     )
     service._last_snapshot = _snapshot_with_passed_high()
 
@@ -66,7 +71,7 @@ async def test_check_due_fills_passed_event(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.asyncio
 async def test_fetch_actuals_now_works_when_disabled(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     async def fake_run_claude(*_args: object, **_kwargs: object) -> ClaudeResult:
         return ClaudeResult(status=ReportStatus.SUCCESS, html=_SAMPLE)
@@ -82,6 +87,7 @@ async def test_fetch_actuals_now_works_when_disabled(
     service = CalendarService(
         handler=handler,
         actuals_settings_provider=lambda: CalendarSettings(actuals_enabled=False),
+        actuals_store=CalendarActualsStore(tmp_path / "actuals.json"),
     )
     snapshot = _snapshot_with_passed_high()
     service._last_snapshot = snapshot
