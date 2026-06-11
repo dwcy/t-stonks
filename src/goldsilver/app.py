@@ -289,6 +289,7 @@ class GoldSilverApp(App[None]):
             self._futures_strip = futures
             yield futures
             stock_row = StockRow(list(self._settings.stock_tickers))
+            stock_row.add_class("primary-stocks")
             self._stock_row = stock_row
             if not self._settings.show_stock_row or not self._settings.stock_tickers:
                 stock_row.display = False

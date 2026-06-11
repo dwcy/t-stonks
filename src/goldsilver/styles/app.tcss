@@ -178,6 +178,10 @@ StockTile {
     padding: 0 1;
 }
 
+StockRow.primary-stocks StockTile {
+    border: round #bb9af7;
+}
+
 StockTile > #stock-head {
     height: 1;
     color: #e0e0e8;
