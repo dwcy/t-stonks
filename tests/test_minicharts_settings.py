@@ -80,6 +80,16 @@ def test_resolve_display_name_uses_preset_without_network() -> None:
     assert _resolve_display_name("BOL.ST", None) == "Boliden"
 
 
+def test_resolve_display_name_uses_override_without_network() -> None:
+    from goldsilver.data.stock_service import _NAME_CACHE, _resolve_display_name
+
+    _NAME_CACHE.pop("LUG.TO", None)
+    _NAME_CACHE.pop("LUMI.ST", None)
+
+    assert _resolve_display_name("LUG.TO", None) == "Lundin Gold"
+    assert _resolve_display_name("LUMI.ST", None) == "Lundin Mining"
+
+
 def test_resolve_display_name_falls_back_to_symbol() -> None:
     from goldsilver.data.stock_service import _NAME_CACHE, _resolve_display_name
 

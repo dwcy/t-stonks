@@ -8,7 +8,7 @@ import yfinance as yf
 from pydantic import ValidationError
 
 from goldsilver.data.models_macro import StockQuote
-from goldsilver.data.stock_presets import PRESET_NAMES
+from goldsilver.data.stock_presets import NAME_OVERRIDES, PRESET_NAMES
 
 
 StockHandler = Callable[[list[StockQuote]], Awaitable[None] | None]
@@ -99,7 +99,8 @@ def _resolve_display_name(sym: str, ticker: yf.Ticker | None) -> str:
     cached = _NAME_CACHE.get(sym)
     if cached:
         return cached
-    name = PRESET_NAMES.get(sym.upper())
+    key = sym.upper()
+    name = NAME_OVERRIDES.get(key) or PRESET_NAMES.get(key)
     if not name and ticker is not None:
         try:
             raw = ticker.info.get("shortName") or ticker.info.get("longName")

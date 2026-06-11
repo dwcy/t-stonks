@@ -47,6 +47,14 @@ PRESET_TICKERS: frozenset[str] = frozenset(t for t, _ in PRESET_STOCKS)
 
 PRESET_NAMES: dict[str, str] = dict(PRESET_STOCKS)
 
+# Display-name overrides for non-preset tickers (skips the Yahoo shortName lookup).
+NAME_OVERRIDES: dict[str, str] = {
+    "LUG.TO": "Lundin Gold",
+    "LUG.ST": "Lundin Gold",
+    "LUMI.ST": "Lundin Mining",
+    "LUNR.V": "LUNR",
+}
+
 
 def extra_row_tickers(
     enabled_presets: list[str],
