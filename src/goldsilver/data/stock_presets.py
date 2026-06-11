@@ -45,6 +45,8 @@ PRESET_STOCKS: tuple[tuple[str, str], ...] = (
 
 PRESET_TICKERS: frozenset[str] = frozenset(t for t, _ in PRESET_STOCKS)
 
+PRESET_NAMES: dict[str, str] = dict(PRESET_STOCKS)
+
 
 def extra_row_tickers(
     enabled_presets: list[str],

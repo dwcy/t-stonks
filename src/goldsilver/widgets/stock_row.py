@@ -9,7 +9,7 @@ from goldsilver.data.models_macro import StockQuote
 from goldsilver.widgets.stock_tile import StockTile
 
 
-TILES_PER_ROW = 6
+TILES_PER_ROW = 4
 
 
 class StockRow(Grid):

@@ -12,6 +12,8 @@ from textual_plotext import PlotextPlot
 
 from goldsilver.data.models_macro import StockQuote
 
+MAX_NAME_CHARS = 16
+
 
 class _StockSpark(PlotextPlot):
     DEFAULT_CSS = """
@@ -112,8 +114,11 @@ class StockTile(Vertical):
         arrow = "▬" if flat else ("▲" if change > 0 else "▼")
         color = "#7a7a8a" if flat else ("#7dff8c" if change > 0 else "#ff6b6b")
         sign = "+" if change >= 0 else ""
+        name = quote.display_name
+        if len(name) > MAX_NAME_CHARS:
+            name = name[: MAX_NAME_CHARS - 1] + "…"
         text = Text.assemble(
-            (f"{quote.display_name} ", "bold #e0e0e8"),
+            (f"{name} ", "bold #e0e0e8"),
             (f"{quote.price:.2f} ", "#e0e0e8"),
             (f"{quote.currency} ", "dim #7a7a8a"),
             (arrow, color),

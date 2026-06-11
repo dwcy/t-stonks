@@ -74,6 +74,41 @@ def test_parse_tickers_splits_and_dedupes() -> None:
     assert parse_tickers("abb.st, BOL.ST; abb.st bol.st") == ["ABB.ST", "BOL.ST"]
 
 
+def test_resolve_display_name_uses_preset_without_network() -> None:
+    from goldsilver.data.stock_service import _resolve_display_name
+
+    assert _resolve_display_name("BOL.ST", None) == "Boliden"
+
+
+def test_resolve_display_name_falls_back_to_symbol() -> None:
+    from goldsilver.data.stock_service import _NAME_CACHE, _resolve_display_name
+
+    _NAME_CACHE.pop("UNKNOWN.XX", None)
+
+    assert _resolve_display_name("UNKNOWN.XX", None) == "UNKNOWN.XX"
+
+
+def test_stock_tile_header_shows_name_and_percent() -> None:
+    from datetime import datetime, timezone
+
+    from goldsilver.data.models_macro import StockQuote
+    from goldsilver.widgets.stock_tile import StockTile
+
+    tile = StockTile("VSURE.ST")
+    tile.quote = StockQuote(
+        ticker="VSURE.ST",
+        display_name="A Very Long Company Name AB",
+        price=100.0,
+        previous_close=90.0,
+        currency="SEK",
+        time=datetime.now(timezone.utc),
+    )
+    plain = str(tile._render_header())
+
+    assert "A Very Long Com…" in plain
+    assert "+11.11%" in plain
+
+
 class _Harness(App[None]):
     def __init__(self, state: PlotSettings) -> None:
         super().__init__()
