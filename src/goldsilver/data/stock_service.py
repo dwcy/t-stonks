@@ -8,6 +8,7 @@ import yfinance as yf
 from pydantic import ValidationError
 
 from goldsilver.data.models_macro import StockQuote
+from goldsilver.data.stock_presets import NAME_OVERRIDES, PRESET_NAMES
 
 
 StockHandler = Callable[[list[StockQuote]], Awaitable[None] | None]
@@ -91,6 +92,27 @@ class StockService:
             await result
 
 
+_NAME_CACHE: dict[str, str] = {}
+
+
+def _resolve_display_name(sym: str, ticker: yf.Ticker | None) -> str:
+    cached = _NAME_CACHE.get(sym)
+    if cached:
+        return cached
+    key = sym.upper()
+    name = NAME_OVERRIDES.get(key) or PRESET_NAMES.get(key)
+    if not name and ticker is not None:
+        try:
+            raw = ticker.info.get("shortName") or ticker.info.get("longName")
+            if isinstance(raw, str) and raw.strip():
+                name = raw.strip()
+        except Exception:
+            name = None
+    name = name or sym
+    _NAME_CACHE[sym] = name
+    return name
+
+
 def _fetch_batch(tickers: list[str]) -> list[StockQuote]:
     out: list[StockQuote] = []
     for sym in tickers:
@@ -171,7 +193,7 @@ def fetch_single_quote(sym: str) -> StockQuote | None:
     try:
         return StockQuote(
             ticker=sym,
-            display_name=sym,
+            display_name=_resolve_display_name(sym, ticker),
             price=price,
             previous_close=previous_close,
             intraday_closes=tuple(today_closes),

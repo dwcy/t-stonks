@@ -34,6 +34,22 @@ def _default_stock_tickers() -> list[str]:
     return ["LUG.TO", "LUG.ST", "LUMI.ST", "LUNR.V"]
 
 
+def _clean_ticker_list(raw: object) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        t = item.strip().upper()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        cleaned.append(t)
+    return cleaned
+
+
 GOLD_PRESETS: dict[str, tuple[int, int, int]] = {
     "Classic Gold": (255, 213, 107),
     "Deep Gold": (212, 175, 55),
@@ -276,6 +292,8 @@ class AppSettings:
     silver_color_name: str = DEFAULT_SILVER
     metals_columns: int = 2
     stock_tickers: list[str] = field(default_factory=_default_stock_tickers)
+    extra_stock_tickers: list[str] = field(default_factory=list)
+    enabled_preset_tickers: list[str] = field(default_factory=list)
     mini_tiles: list[str] = field(default_factory=_default_mini_tiles)
     visible_signals: dict[str, bool] = field(default_factory=_default_visible_signals)
     signal_params: dict[str, dict[str, float]] = field(
@@ -318,6 +336,14 @@ class AppSettings:
                 seen.add(t)
                 cleaned.append(t)
             self.stock_tickers = cleaned
+        self.extra_stock_tickers = _clean_ticker_list(self.extra_stock_tickers)
+        from goldsilver.data.stock_presets import PRESET_TICKERS
+
+        self.enabled_preset_tickers = [
+            t
+            for t in _clean_ticker_list(self.enabled_preset_tickers)
+            if t in PRESET_TICKERS
+        ]
         if not isinstance(self.mini_tiles, list):
             self.mini_tiles = _default_mini_tiles()
         else:

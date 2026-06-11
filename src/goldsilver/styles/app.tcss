@@ -158,24 +158,28 @@ FuturesStrip {
 }
 
 StockRow {
-    height: 7;
+    height: auto;
     padding: 0;
     grid-rows: 7;
     grid-gutter: 0 1;
 }
 
-StockRow.cols-1 { grid-size: 1 1; }
-StockRow.cols-2 { grid-size: 2 1; }
-StockRow.cols-3 { grid-size: 3 1; }
-StockRow.cols-4 { grid-size: 4 1; }
-StockRow.cols-5 { grid-size: 5 1; }
-StockRow.cols-6 { grid-size: 6 1; }
+StockRow.cols-1 { grid-size: 1; }
+StockRow.cols-2 { grid-size: 2; }
+StockRow.cols-3 { grid-size: 3; }
+StockRow.cols-4 { grid-size: 4; }
+StockRow.cols-5 { grid-size: 5; }
+StockRow.cols-6 { grid-size: 6; }
 
 StockTile {
     width: 1fr;
     height: 7;
     border: round #2a2a3a;
     padding: 0 1;
+}
+
+StockRow.primary-stocks StockTile {
+    border: round #bb9af7;
 }
 
 StockTile > #stock-head {
@@ -331,6 +335,59 @@ PlotSettingsScreen .mini-tile-row .mini-reorder {
 
 #mini-tiles-list {
     height: auto;
+}
+
+#plot-settings-tabs {
+    height: 1fr;
+}
+
+#plot-settings-minicharts {
+    height: 1fr;
+    width: 100%;
+}
+
+#minicharts-tab {
+    height: auto;
+}
+
+#stock-search-results {
+    height: auto;
+    max-height: 12;
+    background: #10101a;
+    border: round #2a2a3a;
+    margin-top: 1;
+}
+
+PlotSettingsScreen .extra-ticker-row {
+    height: 3;
+    align: left middle;
+}
+
+PlotSettingsScreen .extra-ticker-label {
+    width: 1fr;
+    height: 3;
+    content-align: left middle;
+    color: #d0d0e0;
+}
+
+PlotSettingsScreen .extra-rm {
+    min-width: 5;
+    width: 5;
+    height: 3;
+}
+
+#extra-tickers-list {
+    height: auto;
+}
+
+#preset-list {
+    height: auto;
+}
+
+PlotSettingsScreen .preset-check {
+    height: 1;
+    border: none;
+    padding: 0;
 }
 
 #setting-close {

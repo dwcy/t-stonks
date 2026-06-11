@@ -14,6 +14,7 @@ from goldsilver.data.calendar_actuals import (
     due_events,
     merge_event,
 )
+from goldsilver.data.calendar_actuals_store import CalendarActualsStore
 from goldsilver.data.calendar_static import load_static_events, window_around
 from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import (
@@ -66,6 +67,7 @@ class CalendarService:
         refresh_interval_s: float = CALENDAR_REFRESH_INTERVAL_S,
         fred_key: str | None = None,
         actuals_settings_provider: CalendarSettingsProvider | None = None,
+        actuals_store: CalendarActualsStore | None = None,
     ) -> None:
         self._handler = handler
         self._refresh_interval_s = refresh_interval_s
@@ -73,6 +75,7 @@ class CalendarService:
             fred_key if fred_key is not None else os.environ.get(FRED_KEY_ENV)
         )
         self._actuals_provider = actuals_settings_provider
+        self._actuals_store = actuals_store or CalendarActualsStore()
         self._task: asyncio.Task[None] | None = None
         self._actuals_task: asyncio.Task[None] | None = None
         self._actuals_fetcher: ActualsFetcher | None = None
@@ -80,6 +83,8 @@ class CalendarService:
         self._last_snapshot: CalendarSnapshot | None = None
 
     def start(self) -> None:
+        self._actuals_store.load()
+        self._actuals_store.prune(datetime.now(timezone.utc))
         if self._task is None or self._task.done():
             self._stop.clear()
             self._task = asyncio.create_task(self._run(), name="calendar-loop")
@@ -107,6 +112,9 @@ class CalendarService:
             await self._refresh_once(client)
 
     async def fetch_actuals_now(self, event: CalendarEvent) -> CalendarEvent | None:
+        stored = self._actuals_store.get(event)
+        if stored is not None:
+            return await self._apply_updated(stored.apply_to(event))
         if find_claude() is None:
             return None
         self._ensure_fetcher()
@@ -114,6 +122,10 @@ class CalendarService:
         updated = await self._actuals_fetcher.fetch(event)
         if updated is None:
             return None
+        self._actuals_store.put(updated)
+        return await self._apply_updated(updated)
+
+    async def _apply_updated(self, updated: CalendarEvent) -> CalendarEvent:
         base = self._last_snapshot
         if base is not None:
             merged = merge_event(base, updated)
@@ -152,6 +164,7 @@ class CalendarService:
 
         all_events = static_events + fred_events
         snapshot = self._build_snapshot(today_stk, all_events, status="ok")
+        snapshot = self._actuals_store.apply(snapshot)
         self._last_snapshot = snapshot
         await self._emit(snapshot)
 
@@ -277,6 +290,7 @@ class CalendarService:
             return
         merged = self._last_snapshot or snapshot
         for event in updated:
+            self._actuals_store.put(event)
             merged = merge_event(merged, event)
         self._last_snapshot = merged
         await self._emit(merged)

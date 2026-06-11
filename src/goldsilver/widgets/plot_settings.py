@@ -6,7 +6,15 @@ from typing import Callable
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Switch
+from textual.widgets import (
+    Button,
+    Label,
+    RadioButton,
+    RadioSet,
+    Switch,
+    TabbedContent,
+    TabPane,
+)
 
 from goldsilver.data.settings import (
     ALLOWED_MINI_TILES,
@@ -14,6 +22,7 @@ from goldsilver.data.settings import (
 )
 from goldsilver.data.signal_strategies import STRATEGY_REGISTRY
 from goldsilver.widgets.chart import ChartKind
+from goldsilver.widgets.minicharts_tab import MiniChartsTab
 
 
 TIMEFRAME_LABELS = ("today", "5d", "1mo", "3mo")
@@ -54,6 +63,8 @@ class PlotSettings:
     marker_recoil_strategy: str = ""
     mini_tiles: list[str] = field(default_factory=list)
     stock_tickers: list[str] = field(default_factory=list)
+    extra_stock_tickers: list[str] = field(default_factory=list)
+    enabled_preset_tickers: list[str] = field(default_factory=list)
 
 
 class PlotSettingsScreen(ModalScreen[None]):
@@ -81,155 +92,139 @@ class PlotSettingsScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Container(id="plot-settings-dialog"):
             yield Label("Settings", id="plot-settings-title")
-            with VerticalScroll(id="plot-settings-body"):
-                with Vertical(classes="setting-group"):
-                    yield Label("Cards per row", classes="setting-label")
-                    with RadioSet(id="setting-columns"):
-                        for n in METALS_COLUMNS_CHOICES:
-                            yield RadioButton(
-                                str(n),
-                                value=(n == self._state.metals_columns),
-                            )
-                with Vertical(classes="setting-group"):
-                    yield Label("Timeframe", classes="setting-label")
-                    with RadioSet(id="setting-timeframe"):
-                        for i, label in enumerate(TIMEFRAME_LABELS):
-                            yield RadioButton(
-                                label, value=(i == self._state.timeframe_index)
-                            )
-                with Vertical(classes="setting-group"):
-                    yield Label("Chart kind", classes="setting-label")
-                    with RadioSet(id="setting-kind"):
-                        yield RadioButton(
-                            "Line", value=(self._state.chart_kind == "line")
-                        )
-                        yield RadioButton(
-                            "Candle", value=(self._state.chart_kind == "candle")
-                        )
-                with Vertical(classes="setting-group"):
-                    yield Label("Duplicate charts", classes="setting-label")
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_dual_charts,
-                            id="setting-dual",
-                        )
-                        yield Label(
-                            "Add a 2nd Gold/Silver chart",
-                            classes="switch-label",
-                        )
-                    yield Label("2nd chart kind", classes="sub-label")
-                    with RadioSet(id="setting-kind2"):
-                        yield RadioButton(
-                            "Line", value=(self._state.chart_kind2 == "line")
-                        )
-                        yield RadioButton(
-                            "Candle", value=(self._state.chart_kind2 == "candle")
-                        )
-                with Vertical(classes="setting-group"):
-                    yield Label("Overlays", classes="setting-label")
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(value=self._state.show_sma, id="setting-sma")
-                        yield Label("SMA (20 / 50)", classes="switch-label")
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(value=self._state.show_vwap, id="setting-vwap")
-                        yield Label("VWAP", classes="switch-label")
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_day_refs,
-                            id="setting-refs",
-                        )
-                        yield Label(
-                            "Day refs (prev close, H/L)",
-                            classes="switch-label",
-                        )
-                with Vertical(classes="setting-group"):
-                    yield Label("Signals shown", classes="setting-label")
-                    for name in self._strategy_names:
-                        with Horizontal(classes="switch-row"):
-                            yield Switch(
-                                value=self._state.visible_signals.get(name, False),
-                                id=self._signal_switch_id(name),
-                            )
-                            yield Label(name, classes="switch-label")
-                    yield Button(
-                        "Edit math…",
-                        variant="default",
-                        id="open-edit-math",
-                    )
-                with Vertical(classes="setting-group"):
-                    yield Label("Chart markers", classes="setting-label")
-                    yield Label("Momentum source", classes="sub-label")
-                    with RadioSet(id="setting-marker-momentum"):
-                        for name in self._momentum_names:
-                            yield RadioButton(
-                                name,
-                                value=(name == self._state.marker_momentum_strategy),
-                            )
-                    yield Label("Recoil source", classes="sub-label")
-                    with RadioSet(id="setting-marker-recoil"):
-                        for name in self._recoil_names:
-                            yield RadioButton(
-                                name,
-                                value=(name == self._state.marker_recoil_strategy),
-                            )
-                with Vertical(classes="setting-group"):
-                    yield Label("News feeds", classes="setting-label")
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_news_markets,
-                            id="setting-news-markets",
-                        )
-                        yield Label("Markets news", classes="switch-label")
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_news_trump,
-                            id="setting-news-trump",
-                        )
-                        yield Label("Trump posts", classes="switch-label")
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_congress_trades,
-                            id="setting-congress-trades",
-                        )
-                        yield Label("Congress trades", classes="switch-label")
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_insider_trades,
-                            id="setting-insider-trades",
-                        )
-                        yield Label(
-                            "Trump Media insiders (SEC Form 4)",
-                            classes="switch-label",
-                        )
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_stocktwits,
-                            id="setting-stocktwits",
-                        )
-                        yield Label(
-                            "StockTwits chatter",
-                            classes="switch-label",
-                        )
-                with Vertical(classes="setting-group"):
-                    yield Label("Mini tiles", classes="setting-label")
-                    with Vertical(id="mini-tiles-list"):
-                        for row in self._build_mini_rows():
-                            yield row
-                with Vertical(classes="setting-group"):
-                    yield Label("Mini charts", classes="setting-label")
-                    with Horizontal(classes="switch-row"):
-                        yield Switch(
-                            value=self._state.show_stock_row,
-                            id="setting-stock-row",
-                        )
-                        yield Label("Show mini charts", classes="switch-label")
-                    yield Label("Tickers (comma-separated)", classes="sub-label")
-                    yield Input(
-                        value=", ".join(self._state.stock_tickers),
-                        placeholder="LUG.TO, LUG.ST, LUMI.ST",
-                        id="setting-stock-tickers",
-                    )
+            with TabbedContent(id="plot-settings-tabs"):
+                with TabPane("General", id="settings-tab-general"):
+                    with VerticalScroll(id="plot-settings-body"):
+                        yield from self._general_setting_groups()
+                with TabPane("Mini charts", id="settings-tab-minicharts"):
+                    with VerticalScroll(id="plot-settings-minicharts"):
+                        yield MiniChartsTab(self._state, emit=self._emit)
             yield Button("Close", variant="primary", id="setting-close")
+
+    def _general_setting_groups(self) -> ComposeResult:
+        with Vertical(classes="setting-group"):
+            yield Label("Cards per row", classes="setting-label")
+            with RadioSet(id="setting-columns"):
+                for n in METALS_COLUMNS_CHOICES:
+                    yield RadioButton(
+                        str(n),
+                        value=(n == self._state.metals_columns),
+                    )
+        with Vertical(classes="setting-group"):
+            yield Label("Timeframe", classes="setting-label")
+            with RadioSet(id="setting-timeframe"):
+                for i, label in enumerate(TIMEFRAME_LABELS):
+                    yield RadioButton(label, value=(i == self._state.timeframe_index))
+        with Vertical(classes="setting-group"):
+            yield Label("Chart kind", classes="setting-label")
+            with RadioSet(id="setting-kind"):
+                yield RadioButton("Line", value=(self._state.chart_kind == "line"))
+                yield RadioButton("Candle", value=(self._state.chart_kind == "candle"))
+        with Vertical(classes="setting-group"):
+            yield Label("Duplicate charts", classes="setting-label")
+            with Horizontal(classes="switch-row"):
+                yield Switch(
+                    value=self._state.show_dual_charts,
+                    id="setting-dual",
+                )
+                yield Label(
+                    "Add a 2nd Gold/Silver chart",
+                    classes="switch-label",
+                )
+            yield Label("2nd chart kind", classes="sub-label")
+            with RadioSet(id="setting-kind2"):
+                yield RadioButton("Line", value=(self._state.chart_kind2 == "line"))
+                yield RadioButton("Candle", value=(self._state.chart_kind2 == "candle"))
+        with Vertical(classes="setting-group"):
+            yield Label("Overlays", classes="setting-label")
+            with Horizontal(classes="switch-row"):
+                yield Switch(value=self._state.show_sma, id="setting-sma")
+                yield Label("SMA (20 / 50)", classes="switch-label")
+            with Horizontal(classes="switch-row"):
+                yield Switch(value=self._state.show_vwap, id="setting-vwap")
+                yield Label("VWAP", classes="switch-label")
+            with Horizontal(classes="switch-row"):
+                yield Switch(
+                    value=self._state.show_day_refs,
+                    id="setting-refs",
+                )
+                yield Label(
+                    "Day refs (prev close, H/L)",
+                    classes="switch-label",
+                )
+        with Vertical(classes="setting-group"):
+            yield Label("Signals shown", classes="setting-label")
+            for name in self._strategy_names:
+                with Horizontal(classes="switch-row"):
+                    yield Switch(
+                        value=self._state.visible_signals.get(name, False),
+                        id=self._signal_switch_id(name),
+                    )
+                    yield Label(name, classes="switch-label")
+            yield Button(
+                "Edit math…",
+                variant="default",
+                id="open-edit-math",
+            )
+        with Vertical(classes="setting-group"):
+            yield Label("Chart markers", classes="setting-label")
+            yield Label("Momentum source", classes="sub-label")
+            with RadioSet(id="setting-marker-momentum"):
+                for name in self._momentum_names:
+                    yield RadioButton(
+                        name,
+                        value=(name == self._state.marker_momentum_strategy),
+                    )
+            yield Label("Recoil source", classes="sub-label")
+            with RadioSet(id="setting-marker-recoil"):
+                for name in self._recoil_names:
+                    yield RadioButton(
+                        name,
+                        value=(name == self._state.marker_recoil_strategy),
+                    )
+        with Vertical(classes="setting-group"):
+            yield Label("News feeds", classes="setting-label")
+            with Horizontal(classes="switch-row"):
+                yield Switch(
+                    value=self._state.show_news_markets,
+                    id="setting-news-markets",
+                )
+                yield Label("Markets news", classes="switch-label")
+            with Horizontal(classes="switch-row"):
+                yield Switch(
+                    value=self._state.show_news_trump,
+                    id="setting-news-trump",
+                )
+                yield Label("Trump posts", classes="switch-label")
+            with Horizontal(classes="switch-row"):
+                yield Switch(
+                    value=self._state.show_congress_trades,
+                    id="setting-congress-trades",
+                )
+                yield Label("Congress trades", classes="switch-label")
+            with Horizontal(classes="switch-row"):
+                yield Switch(
+                    value=self._state.show_insider_trades,
+                    id="setting-insider-trades",
+                )
+                yield Label(
+                    "Trump Media insiders (SEC Form 4)",
+                    classes="switch-label",
+                )
+            with Horizontal(classes="switch-row"):
+                yield Switch(
+                    value=self._state.show_stocktwits,
+                    id="setting-stocktwits",
+                )
+                yield Label(
+                    "StockTwits chatter",
+                    classes="switch-label",
+                )
+        with Vertical(classes="setting-group"):
+            yield Label("Mini tiles", classes="setting-label")
+            with Vertical(id="mini-tiles-list"):
+                for row in self._build_mini_rows():
+                    yield row
 
     @staticmethod
     def _slug(name: str) -> str:
@@ -385,9 +380,6 @@ class PlotSettingsScreen(ModalScreen[None]):
         elif sw_id == "setting-stocktwits" and v != self._state.show_stocktwits:
             self._state.show_stocktwits = v
             self._emit()
-        elif sw_id == "setting-stock-row" and v != self._state.show_stock_row:
-            self._state.show_stock_row = v
-            self._emit()
         elif sw_id.startswith("setting-show-"):
             for name in self._strategy_names:
                 if self._signal_switch_id(name) == sw_id:
@@ -402,26 +394,6 @@ class PlotSettingsScreen(ModalScreen[None]):
                 if self._mini_slug(tile_id) == slug:
                     self._toggle_mini_tile(tile_id, bool(v))
                     break
-
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id != "setting-stock-tickers":
-            return
-        parsed = self._parse_tickers(event.value)
-        if parsed != self._state.stock_tickers:
-            self._state.stock_tickers = parsed
-            self._emit()
-
-    @staticmethod
-    def _parse_tickers(raw: str) -> list[str]:
-        out: list[str] = []
-        seen: set[str] = set()
-        for chunk in raw.replace(";", ",").replace(" ", ",").split(","):
-            t = chunk.strip().upper()
-            if not t or t in seen:
-                continue
-            seen.add(t)
-            out.append(t)
-        return out
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id or ""

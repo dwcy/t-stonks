@@ -42,6 +42,10 @@ def apply_settings_change(app: GoldSilverApp, settings: PlotSettings) -> None:
     mini_tiles_changed = settings.mini_tiles != app._settings.mini_tiles
     stock_row_visible_changed = settings.show_stock_row != app._settings.show_stock_row
     stock_tickers_changed = settings.stock_tickers != app._settings.stock_tickers
+    extra_stocks_changed = (
+        settings.extra_stock_tickers != app._settings.extra_stock_tickers
+        or settings.enabled_preset_tickers != app._settings.enabled_preset_tickers
+    )
 
     app._timeframe_index = settings.timeframe_index
     app._chart_kind = settings.chart_kind
@@ -69,6 +73,8 @@ def apply_settings_change(app: GoldSilverApp, settings: PlotSettings) -> None:
     app._settings.marker_recoil_strategy = settings.marker_recoil_strategy
     app._settings.mini_tiles = list(settings.mini_tiles)
     app._settings.stock_tickers = list(settings.stock_tickers)
+    app._settings.extra_stock_tickers = list(settings.extra_stock_tickers)
+    app._settings.enabled_preset_tickers = list(settings.enabled_preset_tickers)
     try:
         app._settings.save()
     except OSError:
@@ -94,23 +100,29 @@ def apply_settings_change(app: GoldSilverApp, settings: PlotSettings) -> None:
         app._sync_visible_signals()
     if mini_tiles_changed:
         app._apply_mini_tiles()
-    if stock_tickers_changed:
-        app._stock_service.set_tickers(list(app._settings.stock_tickers))
+    extra_tickers = app._extra_row_tickers()
+    if stock_tickers_changed or extra_stocks_changed:
+        app._stock_service.set_tickers([*app._settings.stock_tickers, *extra_tickers])
         app._stock_service.start()
-        if app._stock_row is not None:
+        if stock_tickers_changed and app._stock_row is not None:
             app._stock_row.apply_tickers(list(app._settings.stock_tickers))
-        if app._settings.stock_tickers:
+        if app._extra_stock_row is not None:
+            app._extra_stock_row.apply_tickers(extra_tickers)
+        if app._settings.stock_tickers or extra_tickers:
             app.run_worker(
                 app._stock_service.refresh_now(),
                 exclusive=False,
                 group="stock-refresh",
             )
-    if (
-        stock_row_visible_changed or stock_tickers_changed
-    ) and app._stock_row is not None:
-        app._stock_row.display = bool(
-            app._settings.show_stock_row and app._settings.stock_tickers
-        )
+    if stock_row_visible_changed or stock_tickers_changed or extra_stocks_changed:
+        if app._stock_row is not None:
+            app._stock_row.display = bool(
+                app._settings.show_stock_row and app._settings.stock_tickers
+            )
+        if app._extra_stock_row is not None:
+            app._extra_stock_row.display = bool(
+                app._settings.show_stock_row and extra_tickers
+            )
 
     if dual_changed:
         for panel in app._dup_panels.values():
