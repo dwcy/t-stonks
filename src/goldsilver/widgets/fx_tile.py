@@ -7,6 +7,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from goldsilver.data.models_macro import FxPair, FxRate
+from goldsilver.widgets.format import DOWN_COLOR, FLAT_COLOR, MUTED_COLOR, UP_COLOR
 
 
 _PAIR_LABEL: dict[FxPair, str] = {
@@ -41,22 +42,24 @@ class FxTile(Static):
     def _redraw(self) -> None:
         label = _PAIR_LABEL[self._pair]
         if self.rate is None:
-            self.update(Text(f"{label}  loading…", style="#7a7a8a"))
+            self.update(Text(f"{label}  loading…", style=FLAT_COLOR))
             return
         rate = self.rate
         change = rate.change
         pct = rate.change_percent
         flat = abs(change) < 0.0001
         arrow = "▬" if flat else ("▲" if change > 0 else "▼")
-        color = "#7a7a8a" if flat else ("#7dff8c" if change > 0 else "#ff6b6b")
+        color = FLAT_COLOR if flat else (UP_COLOR if change > 0 else DOWN_COLOR)
         sign = "" if change < 0 else ("+" if not flat else " ")
         line = Text.assemble(
             (f"{arrow} ", color),
-            (f"{label} ", "#a0a0b0"),
+            (f"{label} ", MUTED_COLOR),
             (f"{rate.rate:.4f} ", "bold #e0e0e8"),
             (f"{sign}{pct:.2f}%", color),
         )
         if self.stale_since is not None:
             local = self.stale_since.astimezone()
-            line.append(f"  · stale {local.strftime('%H:%M')}", style="dim #ff6b6b")
+            line.append(
+                f"  · stale {local.strftime('%H:%M')}", style=f"dim {DOWN_COLOR}"
+            )
         self.update(line)

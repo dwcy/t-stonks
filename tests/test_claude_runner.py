@@ -95,6 +95,17 @@ def test_parse_verdict_malformed_json() -> None:
     assert parse_verdict("<!-- VERDICT: {not json} -->") is None
 
 
+def test_parse_verdict_survives_brace_arrow_inside_string() -> None:
+    html = _VALID_HTML.replace(
+        '"top_reasons":["a","b","c"]', '"top_reasons":["a} -->b"]'
+    )
+
+    verdict = parse_verdict(html)
+
+    assert verdict is not None
+    assert verdict.top_reasons == ["a} -->b"]
+
+
 async def test_run_claude_success(monkeypatch) -> None:
     _patch_exec(monkeypatch, out=_VALID_HTML.encode())
     result = await run_claude(

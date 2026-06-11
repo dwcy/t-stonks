@@ -18,6 +18,10 @@ from goldsilver.reports.models import (
     pinned_metal_tickers,
 )
 from goldsilver.reports.prompt_builder import AnalysisPromptContext, build_prompt
+from goldsilver.reports.reference_quote import (
+    fetch_reference_quote,
+    format_reference_quote,
+)
 
 RunCallback = Callable[[ReportRun], None]
 SettingsProvider = Callable[[], ReportSettings]
@@ -42,14 +46,18 @@ class ReportService:
     def out_root(self) -> Path:
         return Path.cwd() / self._settings_provider().out_dir
 
-    def effective_watchlist(self) -> list[ReportTicker]:
+    def full_watchlist(self) -> list[ReportTicker]:
         stocks = [
             ReportTicker.stock(sym) for sym in self._settings_provider().report_tickers
         ]
         return pinned_metal_tickers() + stocks
 
+    def effective_watchlist(self) -> list[ReportTicker]:
+        excluded = set(self._settings_provider().report_excluded)
+        return [t for t in self.full_watchlist() if t.symbol not in excluded]
+
     def resolve_tickers(self, symbols: Sequence[str]) -> list[ReportTicker]:
-        watchlist = {t.symbol: t for t in self.effective_watchlist()}
+        watchlist = {t.symbol: t for t in self.full_watchlist()}
         out: list[ReportTicker] = []
         for raw in symbols:
             sym = raw.strip().upper()
@@ -77,7 +85,12 @@ class ReportService:
                 started_at=started,
                 status=ReportStatus.RUNNING,
             )
-            context = AnalysisPromptContext.for_ticker(ticker, started)
+            quote = await fetch_reference_quote(ticker)
+            context = AnalysisPromptContext.for_ticker(
+                ticker,
+                started,
+                reference_quote=format_reference_quote(ticker, quote),
+            )
             prompt = build_prompt(context)
             result = await run_claude(
                 prompt,
@@ -85,6 +98,14 @@ class ReportService:
                 timeout_seconds=settings.timeout_seconds,
                 claude_path=self._claude_path,
             )
+            # One retry on transient failures; CLI_MISSING won't fix itself.
+            if result.status in (ReportStatus.TIMEOUT, ReportStatus.ERROR):
+                result = await run_claude(
+                    prompt,
+                    allowed_tools=list(settings.allowed_tools),
+                    timeout_seconds=settings.timeout_seconds,
+                    claude_path=self._claude_path,
+                )
             run.status = result.status
             run.verdict = result.verdict
             run.error = result.error

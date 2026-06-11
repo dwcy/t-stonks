@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import date
 
@@ -14,6 +15,8 @@ from goldsilver.data.trading_hours import is_open
 FetchHistory = Callable[[str, str, str], Awaitable[list[Bar]]]
 
 EOD_TICK_S = 60.0
+
+_log = logging.getLogger(__name__)
 
 
 class HistoryService:
@@ -54,6 +57,7 @@ class HistoryService:
             try:
                 bars = await self._fetch(symbol, "7d", "1m")
             except Exception:
+                _log.exception("history backfill fetch failed for %s", symbol)
                 continue
             for day, day_bars in split_by_day(bars).items():
                 save_day(symbol, day, day_bars)
@@ -72,6 +76,7 @@ class HistoryService:
             try:
                 bars = await self._fetch(symbol, "2d", "1m")
             except Exception:
+                _log.exception("end-of-day history fetch failed for %s", symbol)
                 continue
             day_bars = split_by_day(bars).get(today)
             if day_bars:

@@ -1,3 +1,4 @@
+from goldsilver.widgets.alerts_screen import AlertsScreen
 from goldsilver.widgets.calendar_event_screen import CalendarEventScreen
 from goldsilver.widgets.calendar_panel import CalendarPanel
 from goldsilver.widgets.chart import PriceChart
@@ -12,14 +13,17 @@ from goldsilver.widgets.metal_panel import MetalPanel
 from goldsilver.widgets.news_panel import NewsPanel
 from goldsilver.widgets.omx_strip import OmxStrip
 from goldsilver.widgets.plot_settings import PlotSettings, PlotSettingsScreen
+from goldsilver.widgets.ratio_tile import RatioTile
 from goldsilver.widgets.report_watchlist import ReportWatchlistScreen
 from goldsilver.widgets.stock_row import StockRow
 from goldsilver.widgets.stock_tile import StockTile
 from goldsilver.widgets.stocktwits_panel import StockTwitsPanel
 from goldsilver.widgets.trade_simulator import TradeSimulatorScreen
+from goldsilver.widgets.yield_tile import RealYieldTile
 
 
 __all__ = [
+    "AlertsScreen",
     "CalendarEventScreen",
     "CalendarPanel",
     "CommodityTile",
@@ -35,6 +39,8 @@ __all__ = [
     "PlotSettings",
     "PlotSettingsScreen",
     "PriceChart",
+    "RatioTile",
+    "RealYieldTile",
     "ReportWatchlistScreen",
     "StockRow",
     "StockTile",

@@ -9,6 +9,7 @@ from xml.etree import ElementTree as ET
 import httpx
 from pydantic import ValidationError
 
+from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import InsiderSide, InsiderTrade
 
 
@@ -16,9 +17,7 @@ InsiderTradesHandler = Callable[[list[InsiderTrade]], Awaitable[None] | None]
 InsiderTradesStaleHandler = Callable[[datetime], Awaitable[None] | None]
 
 INSIDER_REFRESH_INTERVAL_S = 1800.0
-INSIDER_TICKERS_DEFAULT: tuple[tuple[str, str], ...] = (
-    ("DJT", "0001849635"),
-)
+INSIDER_TICKERS_DEFAULT: tuple[tuple[str, str], ...] = (("DJT", "0001849635"),)
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 ARCHIVES_BASE = "https://www.sec.gov/Archives/edgar/data"
 
@@ -69,13 +68,13 @@ class InsiderTradesService:
             self._task = None
 
     async def refresh_now(self) -> None:
-        async with httpx.AsyncClient(
+        async with make_client(
             headers=_HEADERS, timeout=20.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)
 
     async def _run(self) -> None:
-        async with httpx.AsyncClient(
+        async with make_client(
             headers=_HEADERS, timeout=20.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)
@@ -186,8 +185,8 @@ def _parse_form4(
     root: ET.Element, accession: str, fallback_ticker: str
 ) -> list[InsiderTrade]:
     issuer_ticker = (
-        _text(root, "./issuer/issuerTradingSymbol") or fallback_ticker
-    ).strip().upper()
+        (_text(root, "./issuer/issuerTradingSymbol") or fallback_ticker).strip().upper()
+    )
     issuer_name = (_text(root, "./issuer/issuerName") or "").strip()
     insider_name = _text(root, "./reportingOwner/reportingOwnerId/rptOwnerName") or ""
     insider_name = insider_name.strip()
@@ -243,8 +242,10 @@ def _parse_transaction(
     if not code:
         code = "?"
     acquired_disposed = (
-        _text(tx, "./transactionAmounts/transactionAcquiredDisposedCode/value") or ""
-    ).strip().upper()
+        (_text(tx, "./transactionAmounts/transactionAcquiredDisposedCode/value") or "")
+        .strip()
+        .upper()
+    )
     side = _derive_side(code, acquired_disposed)
     shares = _float(_text(tx, "./transactionAmounts/transactionShares/value"))
     price = _float(_text(tx, "./transactionAmounts/transactionPricePerShare/value"))

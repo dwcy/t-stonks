@@ -25,6 +25,9 @@ _MINI_TILE_LABEL: dict[str, str] = {
     "BRENT": "Oil",
     "COPPER": "Copper",
     "BTC": "BTC",
+    "RATIO": "Au/Ag ratio",
+    "DXY": "DXY (USD index)",
+    "REALYIELD": "10Y real yield",
 }
 
 

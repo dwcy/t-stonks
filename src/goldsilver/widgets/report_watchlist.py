@@ -6,12 +6,14 @@ from collections.abc import Callable, Sequence
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Switch
 
 from goldsilver.data.settings import ReportSettings
 from goldsilver.reports.constants import METAL_LABELS, PINNED_METALS, safe_name
 from goldsilver.reports.models import ReportRun, ReportStatus
+from goldsilver.reports.verdict_tracker import TickerAccuracy
 
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
@@ -69,12 +71,6 @@ class ReportWatchlistScreen(ModalScreen[None]):
                         id="report-concurrency",
                         classes="report-cfg-input",
                     )
-                yield Label("Always analyzed", classes="report-section-label")
-                for sym in PINNED_METALS:
-                    yield Label(
-                        f"  • {METAL_LABELS.get(sym, sym)} ({sym}) — pinned",
-                        classes="report-pinned",
-                    )
                 yield Label("Watchlist", classes="report-section-label")
                 with Vertical(id="report-ticker-list"):
                     for row in self._build_ticker_rows():
@@ -89,23 +85,47 @@ class ReportWatchlistScreen(ModalScreen[None]):
                 with Vertical(id="report-recent-list"):
                     for row in self._build_recent_rows():
                         yield row
+                yield Label("Verdict accuracy", classes="report-section-label")
+                with Vertical(id="report-accuracy-list"):
+                    yield Horizontal(
+                        Label("computing…", classes="report-empty"),
+                        classes="report-recent-row",
+                    )
             with Horizontal(id="report-actions"):
                 yield Button("Generate now", variant="primary", id="report-generate")
                 yield Button("Close", id="report-close")
 
+    def _watchlist_entries(self) -> list[tuple[str, bool]]:
+        """(symbol, is_metal) for every row — metals first, then user stocks."""
+        return [(sym, True) for sym in PINNED_METALS] + [
+            (sym, False) for sym in self._settings.report_tickers
+        ]
+
+    def _symbol_for_safe(self, token: str) -> str | None:
+        for sym, _ in self._watchlist_entries():
+            if safe_name(sym) == token:
+                return sym
+        return None
+
     def _build_ticker_rows(self) -> list[Horizontal]:
         rows: list[Horizontal] = []
-        if not self._settings.report_tickers:
-            rows.append(Horizontal(Label("(no stocks added)", classes="report-empty")))
-            return rows
-        for sym in self._settings.report_tickers:
-            rows.append(
-                Horizontal(
-                    Label(sym, classes="report-ticker-label"),
-                    Button("✕", id=f"rm-{safe_name(sym)}", classes="report-remove"),
-                    classes="report-ticker-row",
+        excluded = set(self._settings.report_excluded)
+        for sym, is_metal in self._watchlist_entries():
+            label = f"{METAL_LABELS.get(sym, sym)} ({sym})" if is_metal else sym
+            children: list = [
+                Switch(
+                    value=sym not in excluded,
+                    id=f"inc-{safe_name(sym)}",
+                    classes="report-include",
+                ),
+                Label(label, classes="report-ticker-label"),
+                Button("▶ Generate", id=f"gen-{safe_name(sym)}", classes="report-gen"),
+            ]
+            if not is_metal:
+                children.append(
+                    Button("✕", id=f"rm-{safe_name(sym)}", classes="report-remove")
                 )
-            )
+            rows.append(Horizontal(*children, classes="report-ticker-row"))
         return rows
 
     def _build_recent_rows(self) -> list[Horizontal]:
@@ -157,13 +177,13 @@ class ReportWatchlistScreen(ModalScreen[None]):
         for sym in self._generating:
             try:
                 self.query_one(f"#spin-{safe_name(sym)}", Label).update(frame)
-            except Exception:
+            except NoMatches:
                 pass
 
     def _refresh_recent(self) -> None:
         try:
             container = self.query_one("#report-recent-list", Vertical)
-        except Exception:
+        except NoMatches:
             return
         container.remove_children()
         container.mount(*self._build_recent_rows())
@@ -191,6 +211,36 @@ class ReportWatchlistScreen(ModalScreen[None]):
         self._refresh_recent()
         if not self._generating:
             self._stop_spinner()
+
+    def set_accuracy(self, rows: list[TickerAccuracy]) -> None:
+        try:
+            container = self.query_one("#report-accuracy-list", Vertical)
+        except NoMatches:
+            return
+        container.remove_children()
+        if not rows:
+            container.mount(
+                Horizontal(
+                    Label("(no scored verdicts yet)", classes="report-empty"),
+                    classes="report-recent-row",
+                )
+            )
+            return
+
+        def _fmt(hits: int, n: int) -> str:
+            return f"{hits}/{n} ({hits / n * 100:.0f}%)" if n else "—"
+
+        for row in rows:
+            container.mount(
+                Horizontal(
+                    Label(
+                        f"{row.ticker:<8} intraday {_fmt(row.intraday_hits, row.intraday_n)}"
+                        f"  ·  swing {_fmt(row.swing_hits, row.swing_n)}",
+                        classes="report-recent-label",
+                    ),
+                    classes="report-recent-row",
+                )
+            )
 
     def remove_run(self, run: ReportRun) -> None:
         self._recent = [r for r in self._recent if r is not run]
@@ -233,13 +283,28 @@ class ReportWatchlistScreen(ModalScreen[None]):
     def _remove_ticker(self, sym: str) -> None:
         if sym in self._settings.report_tickers:
             self._settings.report_tickers.remove(sym)
+            if sym in self._settings.report_excluded:
+                self._settings.report_excluded.remove(sym)
             self._refresh_tickers()
             self._on_change()
 
+    def _set_included(self, sym: str, included: bool) -> None:
+        excluded = self._settings.report_excluded
+        if included and sym in excluded:
+            excluded.remove(sym)
+        elif not included and sym not in excluded:
+            excluded.append(sym)
+        self._on_change()
+
     def on_switch_changed(self, event: Switch.Changed) -> None:
-        if event.switch.id == "report-enabled":
+        sid = event.switch.id or ""
+        if sid == "report-enabled":
             self._settings.enabled = event.value
             self._on_change()
+        elif sid.startswith("inc-"):
+            sym = self._symbol_for_safe(sid[len("inc-") :])
+            if sym is not None:
+                self._set_included(sym, event.value)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "report-add-input":
@@ -273,6 +338,10 @@ class ReportWatchlistScreen(ModalScreen[None]):
             field = self.query_one("#report-add-input", Input)
             self._add_ticker(field.value)
             field.value = ""
+        elif bid.startswith("gen-"):
+            sym = self._symbol_for_safe(bid[len("gen-") :])
+            if sym is not None:
+                self._on_retry(sym)
         elif bid.startswith("rm-"):
             target = bid[len("rm-") :]
             for sym in list(self._settings.report_tickers):

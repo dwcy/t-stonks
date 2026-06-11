@@ -20,7 +20,15 @@ from textual.widgets import (
     TabPane,
 )
 
+from textual.css.query import NoMatches
+
 from goldsilver.data.models import GOLD, SILVER
+from goldsilver.data.signal_stats import (
+    DEFAULT_HORIZON_MINUTES,
+    StrategyScore,
+    score_all,
+)
+from goldsilver.data.signal_strategies import STRATEGY_REGISTRY
 from goldsilver.data.trade_models import SellMode, SimulatorSummary, TriggerMode
 from goldsilver.widgets.trade_backtest import (
     compose_backtest_pane,
@@ -53,6 +61,8 @@ class TradeSimulatorScreen(ModalScreen[None]):
                     yield Static("", id="sim-lifetime", classes="sim-stat")
                     yield Static("", id="sim-status", classes="sim-stat")
                 with Horizontal(classes="sim-row"):
+                    yield Static("", id="sim-analytics", classes="sim-stat")
+                with Horizontal(classes="sim-row"):
                     yield Static("", id="sim-pos-gold", classes="sim-pos")
                     yield Static("", id="sim-pos-silver", classes="sim-pos")
                 with Vertical(classes="sim-controls"):
@@ -81,6 +91,27 @@ class TradeSimulatorScreen(ModalScreen[None]):
                         with RadioSet(id="sim-trigger"):
                             yield RadioButton("Either", value=True)
                             yield RadioButton("Both")
+                    with Horizontal(classes="sim-row sim-header-row"):
+                        yield Label("Stop-loss % (0=off)", classes="sim-header-cell")
+                        yield Label("Take-profit % (0=off)", classes="sim-header-cell")
+                        yield Label("Trailing % (0=off)", classes="sim-header-cell")
+                    with Horizontal(classes="sim-row sim-sell-row"):
+                        sim = self.app._settings.simulator  # type: ignore[attr-defined]
+                        yield Input(
+                            value=f"{sim.stop_loss_pct:g}",
+                            id="sim-stop-pct",
+                            classes="sim-pct-input",
+                        )
+                        yield Input(
+                            value=f"{sim.take_profit_pct:g}",
+                            id="sim-tp-pct",
+                            classes="sim-pct-input",
+                        )
+                        yield Input(
+                            value=f"{sim.trailing_stop_pct:g}",
+                            id="sim-trail-pct",
+                            classes="sim-pct-input",
+                        )
                 with TabbedContent(id="sim-tabs"):
                     with TabPane("Recent", id="sim-tab-recent"):
                         trades_table = DataTable(id="sim-trades", zebra_stripes=True)
@@ -103,6 +134,24 @@ class TradeSimulatorScreen(ModalScreen[None]):
                         history_table.add_column("Trades", key="trades")
                         history_table.add_column("Realized P/L", key="pnl")
                         yield history_table
+                    with TabPane("Signal stats", id="sim-tab-signal-stats"):
+                        yield Static(
+                            f"Scoring 2d of 1m bars against the close "
+                            f"{DEFAULT_HORIZON_MINUTES}m after each fire…",
+                            id="sim-signal-stats-note",
+                        )
+                        stats_table = DataTable(
+                            id="sim-signal-stats", zebra_stripes=True
+                        )
+                        stats_table.add_columns(
+                            "Strategy",
+                            "Kind",
+                            "Gold fires",
+                            "Gold win%",
+                            "Silver fires",
+                            "Silver win%",
+                        )
+                        yield stats_table
                     yield from compose_backtest_pane(GOLD, self.app._settings)
                     yield from compose_backtest_pane(SILVER, self.app._settings)
             with Horizontal(id="trade-sim-footer"):
@@ -115,6 +164,41 @@ class TradeSimulatorScreen(ModalScreen[None]):
         self.set_interval(1.0, self._refresh)
         refresh_day_options(self, GOLD)
         refresh_day_options(self, SILVER)
+        self.run_worker(
+            self._load_signal_stats(), exclusive=True, group="sim-signal-stats"
+        )
+
+    async def _load_signal_stats(self) -> None:
+        service = self.app._service  # type: ignore[attr-defined]
+        overrides = self.app._settings.signal_params  # type: ignore[attr-defined]
+        bars_by_symbol = {}
+        for symbol in (GOLD, SILVER):
+            try:
+                bars_by_symbol[symbol] = await service.fetch_history(
+                    symbol, period="2d", interval="1m"
+                )
+            except Exception:
+                bars_by_symbol[symbol] = []
+        self._fill_signal_stats(score_all(bars_by_symbol, overrides))
+
+    def _fill_signal_stats(self, scores: dict[str, dict[str, StrategyScore]]) -> None:
+        try:
+            table = self.query_one("#sim-signal-stats", DataTable)
+        except NoMatches:
+            return
+
+        def _cells(score: StrategyScore | None) -> tuple[str, str]:
+            if score is None or score.win_rate is None:
+                return (str(score.fires) if score else "0", "—")
+            return (str(score.fires), f"{score.win_rate:.0f}%")
+
+        table.clear()
+        for cls in STRATEGY_REGISTRY:
+            gold_fires, gold_win = _cells(scores.get(GOLD, {}).get(cls.name))
+            silver_fires, silver_win = _cells(scores.get(SILVER, {}).get(cls.name))
+            table.add_row(
+                cls.name, cls.kind, gold_fires, gold_win, silver_fires, silver_win
+            )
 
     def _refresh(self) -> None:
         svc = self._service()
@@ -164,6 +248,20 @@ class TradeSimulatorScreen(ModalScreen[None]):
                 (status_text, f"bold {status_color}"),
             ),
         )
+        if s.win_rate is None:
+            analytics = Text("No closed trades yet", style="dim #7a7a8a")
+        else:
+            analytics = Text.assemble(
+                ("Win rate  ", "#a0a0b0"),
+                (f"{s.win_rate:.0f}%   ", "bold #e0e0e8"),
+                ("Avg win  ", "#a0a0b0"),
+                (f"{_fmt_money(s.avg_win or 0.0)}   ", f"bold {_pnl_color(1.0)}"),
+                ("Avg loss  ", "#a0a0b0"),
+                (f"{_fmt_money(s.avg_loss or 0.0)}   ", f"bold {_pnl_color(-1.0)}"),
+                ("Max drawdown  ", "#a0a0b0"),
+                (f"{_fmt_money(-s.max_drawdown)}", "bold #ff9b6b"),
+            )
+        self._set_static("sim-analytics", analytics)
         gold_pos = next((p for p in s.positions if p.symbol == "XAU"), None)
         silver_pos = next((p for p in s.positions if p.symbol == "XAG"), None)
         self._set_static("sim-pos-gold", self._format_position("Gold", gold_pos))
@@ -276,6 +374,19 @@ class TradeSimulatorScreen(ModalScreen[None]):
             except ValueError:
                 return
             await self._service().update_settings(sell_pct=pct)
+            return
+        rule_fields = {
+            "sim-stop-pct": "stop_loss_pct",
+            "sim-tp-pct": "take_profit_pct",
+            "sim-trail-pct": "trailing_stop_pct",
+        }
+        attr = rule_fields.get(event.input.id or "")
+        if attr is not None:
+            try:
+                value = float(event.value.replace(",", "."))
+            except ValueError:
+                return
+            await self._service().update_settings(**{attr: value})
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id

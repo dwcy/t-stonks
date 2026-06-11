@@ -8,6 +8,7 @@ from pathlib import Path
 
 from goldsilver.data.models import GOLD, SILVER, Bar
 from goldsilver.data.session import stockholm_date_of
+from goldsilver.fsutil import atomic_write_text
 
 HISTORY_DIR = Path(__file__).resolve().parents[3] / "history"
 _FOLDER = {GOLD: "gold", SILVER: "silver"}
@@ -39,7 +40,7 @@ def save_day(symbol: str, day: date, bars: list[Bar]) -> None:
         "interval": _INTERVAL,
         "bars": [b.model_dump(mode="json") for b in bars],
     }
-    path.write_text(json.dumps(data), encoding="utf-8")
+    atomic_write_text(path, json.dumps(data))
 
 
 def load_day(symbol: str, day: date) -> list[Bar]:

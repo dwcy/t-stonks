@@ -9,22 +9,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from goldsilver.data.models_macro import NewsItem
-
-
-def _format_age(seconds: int) -> str:
-    if seconds < 0:
-        seconds = 0
-    if seconds < 60:
-        return f"{seconds}s"
-    if seconds < 3600:
-        return f"{seconds // 60}m"
-    if seconds < 86400:
-        hours, rem = divmod(seconds, 3600)
-        minutes = rem // 60
-        return f"{hours}h" if minutes == 0 else f"{hours}h {minutes}m"
-    days, rem = divmod(seconds, 86400)
-    hours = rem // 3600
-    return f"{days}d" if hours == 0 else f"{days}d {hours}h"
+from goldsilver.widgets.format import format_age
 
 
 _SOURCE_STYLE = {
@@ -125,7 +110,7 @@ class NewsPanel(VerticalScroll):
     def _render_item(self, text: Text, item: NewsItem, now: datetime) -> None:
         local = item.published.astimezone()
         delta = now - item.published
-        age = _format_age(int(delta.total_seconds()))
+        age = format_age(int(delta.total_seconds()))
         time_str = local.strftime("%H:%M")
         source_style = _SOURCE_STYLE.get(item.source, "#7a7a8a")
         text.append(f"{time_str} ", style="#7a7a8a")

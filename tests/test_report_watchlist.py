@@ -42,18 +42,49 @@ async def _click(pilot, selector: str) -> None:
     await pilot.pause()
 
 
-async def test_mounts_with_pinned_metals() -> None:
+async def test_mounts_with_unified_watchlist() -> None:
     settings = ReportSettings(report_tickers=["NVDA"])
     sink: dict = {}
     app = _Host()
     async with app.run_test(size=_SIZE) as pilot:
         await app.push_screen(_make_screen(settings, sink))
         await pilot.pause()
-        pinned = app.screen.query(".report-pinned")
-        assert len(pinned) == 2  # Gold + Silver, always present
-        # No remove control exists for pinned metals.
+        # Metals are regular rows with include toggles and generate buttons,
+        # but no remove control.
+        assert len(app.screen.query("#inc-XAU")) == 1
+        assert len(app.screen.query("#inc-XAG")) == 1
+        assert len(app.screen.query("#gen-XAU")) == 1
         assert len(app.screen.query("#rm-XAU")) == 0
         assert len(app.screen.query("#rm-XAG")) == 0
+        # Stocks get toggle, generate, and remove.
+        assert len(app.screen.query("#inc-NVDA")) == 1
+        assert len(app.screen.query("#gen-NVDA")) == 1
+        assert len(app.screen.query("#rm-NVDA")) == 1
+
+
+async def test_include_toggle_updates_excluded() -> None:
+    settings = ReportSettings(report_tickers=["NVDA"])
+    sink: dict = {}
+    app = _Host()
+    async with app.run_test(size=_SIZE) as pilot:
+        await app.push_screen(_make_screen(settings, sink))
+        await pilot.pause()
+        await _click(pilot, "#inc-XAG")
+        assert settings.report_excluded == ["XAG"]
+        await _click(pilot, "#inc-XAG")
+        assert settings.report_excluded == []
+        assert sink.get("changes", 0) >= 2
+
+
+async def test_row_generate_button_fires_single_symbol() -> None:
+    settings = ReportSettings(report_tickers=["NVDA"])
+    sink: dict = {}
+    app = _Host()
+    async with app.run_test(size=_SIZE) as pilot:
+        await app.push_screen(_make_screen(settings, sink))
+        await pilot.pause()
+        await _click(pilot, "#gen-NVDA")
+        assert sink.get("retried") == ["NVDA"]
 
 
 async def test_add_ticker_persists() -> None:

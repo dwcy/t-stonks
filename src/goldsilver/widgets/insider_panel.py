@@ -9,6 +9,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from goldsilver.data.models_macro import InsiderTrade
+from goldsilver.widgets.format import format_age
 
 
 _CODE_LABEL = {
@@ -33,22 +34,6 @@ _CODE_LABEL = {
     "O": "Out-of-money exer.",
     "L": "Small acq.",
 }
-
-
-def _format_age(seconds: int) -> str:
-    if seconds < 0:
-        seconds = 0
-    if seconds < 60:
-        return f"{seconds}s"
-    if seconds < 3600:
-        return f"{seconds // 60}m"
-    if seconds < 86400:
-        h, rem = divmod(seconds, 3600)
-        m = rem // 60
-        return f"{h}h" if m == 0 else f"{h}h {m}m"
-    d, rem = divmod(seconds, 86400)
-    h = rem // 3600
-    return f"{d}d" if h == 0 else f"{d}d {h}h"
 
 
 def _format_value(value: float | None) -> str:
@@ -127,18 +112,18 @@ class InsiderPanel(VerticalScroll):
             marker = f"stale since {local}"
         self.border_subtitle = marker
 
-    def _render_trade(
-        self, text: Text, t: InsiderTrade, now: datetime
-    ) -> None:
+    def _render_trade(self, text: Text, t: InsiderTrade, now: datetime) -> None:
         is_trump = _is_trump(t.insider_name)
         name_style = "bold #ffd56b" if is_trump else "#e0e0e8"
         side_style = (
-            "#7dff8c" if t.side == "BUY"
-            else "#ff6b6b" if t.side == "SELL"
+            "#7dff8c"
+            if t.side == "BUY"
+            else "#ff6b6b"
+            if t.side == "SELL"
             else "#a0a0b0"
         )
         date_str = t.transaction_date.astimezone().strftime("%m-%d")
-        age = _format_age(int((now - t.transaction_date).total_seconds()))
+        age = format_age(int((now - t.transaction_date).total_seconds()))
         shares = f"{int(t.shares):>9,}" if t.shares is not None else "        —"
         price = (
             f"${t.price_per_share:>6.2f}"

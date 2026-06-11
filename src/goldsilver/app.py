@@ -1,7 +1,9 @@
+# > 400 LoC justified: Textual App wiring hub — bindings, compose(), and one
+# callback per data feed must be methods on the single App instance (framework
+# requirement); feature logic is delegated to settings_sync and report_controller.
 from __future__ import annotations
 
 import sys
-import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
@@ -10,6 +12,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Grid, Horizontal, VerticalScroll
+from textual.css.query import NoMatches
 from textual.widgets import Footer, Header, Static
 
 from goldsilver.data import (
@@ -40,6 +43,7 @@ from goldsilver.data.models_macro import (
     InsiderTrade,
     NewsItem,
     OmxSnapshot,
+    RealYieldPoint,
     Signal,
     StockQuote,
     StockTwitMessage,
@@ -53,19 +57,16 @@ from goldsilver.data.signal_strategies import (
 )
 from goldsilver.data.history_service import HistoryService
 from goldsilver.data.service import POLL_INTERVAL_S
+from goldsilver.report_controller import ReportController
 from goldsilver.reports.claude_runner import find_claude
-from goldsilver.reports.html_writer import (
-    delete_report,
-    load_recent_runs,
-    write_index,
-)
-from goldsilver.reports.models import ReportRun
-from goldsilver.reports.report_service import ReportService
-from goldsilver.reports.scheduler import ReportScheduler
+from goldsilver.settings_sync import apply_settings_change
+from goldsilver.data.alerts import PriceAlertEngine
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
 from goldsilver.data.trades_service import TradesService
+from goldsilver.data.yields_service import RealYieldService
 from goldsilver.widgets import (
+    AlertsScreen,
     CalendarEventScreen,
     CalendarPanel,
     CommodityTile,
@@ -80,7 +81,8 @@ from goldsilver.widgets import (
     OmxStrip,
     PlotSettings,
     PlotSettingsScreen,
-    ReportWatchlistScreen,
+    RatioTile,
+    RealYieldTile,
     StockRow,
     StockTwitsPanel,
     TradeSimulatorScreen,
@@ -92,7 +94,9 @@ from goldsilver.widgets.chart import ChartKind
 TRUMP_SOURCE = "TRUMP"
 
 _FX_PAIR_IDS: frozenset[str] = frozenset({"USDSEK", "CADSEK", "EURSEK"})
-_COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC"})
+_COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC", "DXY"})
+_RATIO_ID = "RATIO"
+_REAL_YIELD_ID = "REALYIELD"
 
 TIMEFRAMES: list[tuple[str, str, str, str | None]] = [
     ("today", "2d", "1m", "today"),
@@ -106,6 +110,7 @@ STATUS_STYLES = {
     "connecting": "#ffd56b",
     "connected": "#7dff8c",
     "reconnecting": "#ff9b6b",
+    "stale": "#ffd56b",
 }
 
 
@@ -122,6 +127,7 @@ class GoldSilverApp(App[None]):
         Binding("p", "plot_settings", "Settings"),
         Binding("t", "trade_simulator", "Trade Sim"),
         Binding("g", "reports", "Reports"),
+        Binding("a", "alerts", "Alerts"),
         Binding("r", "refresh", "Refresh"),
         Binding("z", "cycle_zoom", "Zoom"),
         Binding("h", "cycle_chart_mode", "Mode"),
@@ -141,6 +147,13 @@ class GoldSilverApp(App[None]):
         self._dup_panels: dict[str, MetalPanel] = {}
         self._fx_tiles: dict[FxPair, FxTile] = {}
         self._commodity_tiles: dict[CommoditySymbol, CommodityTile] = {}
+        self._ratio_tile: RatioTile | None = None
+        self._last_tick: dict[str, Tick] = {}
+        self._yield_tile: RealYieldTile | None = None
+        self._last_yield_point: RealYieldPoint | None = None
+        self._yield_received = False
+        self._yields_service = RealYieldService(handler=self._on_real_yield)
+        self._alert_engine = PriceAlertEngine()
         self._calendar_panel: CalendarPanel | None = None
         self._calendar_event_screen: CalendarEventScreen | None = None
         self._service = MetalsService(
@@ -224,15 +237,7 @@ class GoldSilverApp(App[None]):
             settings_persister=self._persist_settings,
             on_enable_changed=self._on_simulator_enabled,
         )
-        self._report_service = ReportService(
-            lambda: self._settings.report,
-            on_run_complete=self._on_report_done,
-        )
-        self._report_runs: list[ReportRun] = load_recent_runs(
-            self._report_service.out_root()
-        )
-        self._report_scheduler: ReportScheduler | None = None
-        self._report_screen: ReportWatchlistScreen | None = None
+        self._reports = ReportController(self)
 
     @property
     def _timeframe_label(self) -> str:
@@ -267,6 +272,14 @@ class GoldSilverApp(App[None]):
                         cm_tile = CommodityTile(symbol)
                         self._commodity_tiles[symbol] = cm_tile
                         yield cm_tile
+                    elif tile_id == _RATIO_ID:
+                        ratio_tile = RatioTile()
+                        self._ratio_tile = ratio_tile
+                        yield ratio_tile
+                    elif tile_id == _REAL_YIELD_ID:
+                        yield_tile = RealYieldTile()
+                        self._yield_tile = yield_tile
+                        yield yield_tile
             omx = OmxStrip()
             self._omx_strip = omx
             yield omx
@@ -346,7 +359,7 @@ class GoldSilverApp(App[None]):
         try:
             strip = self.query_one("#macro-strip", Horizontal)
             strip.display = bool(self._settings.mini_tiles)
-        except Exception:
+        except NoMatches:
             pass
         self._service.start()
         self._history_service.start()
@@ -361,15 +374,14 @@ class GoldSilverApp(App[None]):
         self._congress_service.start()
         self._insider_service.start()
         self._stocktwits_service.start()
+        self._yields_service.start()
         self._seed_all()
         if self._settings.simulator.enabled:
             self._start_simulator_replay()
-        if self._settings.report.enabled:
-            self._start_report_scheduler()
+        self._reports.start_scheduler_if_enabled()
 
     async def on_unmount(self) -> None:
-        if self._report_scheduler is not None:
-            self._report_scheduler.request_stop()
+        self._reports.request_stop()
         await self._service.stop()
         await self._history_service.stop()
         await self._calendar_service.stop()
@@ -383,6 +395,7 @@ class GoldSilverApp(App[None]):
         await self._congress_service.stop()
         await self._insider_service.stop()
         await self._stocktwits_service.stop()
+        await self._yields_service.stop()
 
     def _seed_all(self) -> None:
         for symbol in self._panels:
@@ -512,6 +525,9 @@ class GoldSilverApp(App[None]):
     async def _on_tick(self, tick: Tick) -> None:
         self._last_tick_at = tick.time
         self._last_price[tick.symbol] = (tick.price, tick.time)
+        self._last_tick[tick.symbol] = tick
+        self._update_ratio_tile()
+        self._check_price_alerts(tick)
         panels = self._symbol_panels(tick.symbol)
         mom: Signal | None = None
         rec: Signal | None = None
@@ -554,6 +570,10 @@ class GoldSilverApp(App[None]):
             actions.add(rec.action)
         if not actions:
             return
+        if "BUY" in actions and self._settings.beep_on_buy:
+            self.bell()
+        if "SELL" in actions and self._settings.beep_on_sell:
+            self.bell()
         both_buy = (
             mom_fresh and rec_fresh and mom.action == "BUY" and rec.action == "BUY"
         )
@@ -627,6 +647,45 @@ class GoldSilverApp(App[None]):
         else:
             screen.set_status("No released figures found yet.", style="#ff9b6b")
 
+    def _check_price_alerts(self, tick: Tick) -> None:
+        levels = self._settings.price_alerts.get(tick.symbol)
+        if not levels:
+            return
+        for level, crossed_up in self._alert_engine.check(
+            tick.symbol, tick.price, levels
+        ):
+            direction = "above" if crossed_up else "below"
+            self.notify(
+                f"{tick.symbol} crossed {direction} {level:g} ({tick.price:.2f})",
+                severity="warning",
+                timeout=10,
+            )
+            self.bell()
+
+    def action_alerts(self) -> None:
+        self.push_screen(AlertsScreen(self._settings, on_change=self._persist_settings))
+
+    def _update_ratio_tile(self) -> None:
+        if self._ratio_tile is None:
+            return
+        gold = self._last_tick.get(GOLD)
+        silver = self._last_tick.get(SILVER)
+        if gold is None or silver is None or silver.price <= 0:
+            return
+        prev: float | None = None
+        if gold.prev_close > 0 and silver.prev_close > 0:
+            prev = gold.prev_close / silver.prev_close
+        self._ratio_tile.apply_ratio(gold.price / silver.price, prev)
+
+    async def _on_real_yield(self, point: RealYieldPoint | None) -> None:
+        self._yield_received = True
+        self._last_yield_point = point
+        self._update_yield_tile()
+
+    def _update_yield_tile(self) -> None:
+        if self._yield_tile is not None and self._yield_received:
+            self._yield_tile.apply_point(self._last_yield_point)
+
     async def _on_fx_rate(self, rate: FxRate) -> None:
         tile = self._fx_tiles.get(rate.pair)
         if tile is not None:
@@ -678,7 +737,7 @@ class GoldSilverApp(App[None]):
     def _apply_metals_columns(self) -> None:
         try:
             container = self.query_one("#metals")
-        except Exception:
+        except NoMatches:
             return
         for n in (1, 2, 3, 4):
             container.remove_class(f"cards-{n}")
@@ -687,12 +746,16 @@ class GoldSilverApp(App[None]):
     def _apply_mini_tiles(self) -> None:
         try:
             strip = self.query_one("#macro-strip", Horizontal)
-        except Exception:
+        except NoMatches:
             return
         strip.remove_children()
         self._fx_tiles.clear()
         self._commodity_tiles.clear()
-        new_widgets: list[FxTile | CommodityTile | Static] = []
+        self._ratio_tile = None
+        self._yield_tile = None
+        new_widgets: list[
+            FxTile | CommodityTile | RatioTile | RealYieldTile | Static
+        ] = []
         for i, tile_id in enumerate(self._settings.mini_tiles):
             if i > 0:
                 new_widgets.append(Static("|", classes="mini-sep"))
@@ -706,9 +769,19 @@ class GoldSilverApp(App[None]):
                 ct = CommodityTile(symbol)
                 self._commodity_tiles[symbol] = ct
                 new_widgets.append(ct)
+            elif tile_id == _RATIO_ID:
+                rt = RatioTile()
+                self._ratio_tile = rt
+                new_widgets.append(rt)
+            elif tile_id == _REAL_YIELD_ID:
+                yt = RealYieldTile()
+                self._yield_tile = yt
+                new_widgets.append(yt)
         if new_widgets:
             strip.mount(*new_widgets)
         strip.display = bool(new_widgets)
+        self._update_ratio_tile()
+        self._update_yield_tile()
 
     def _apply_news_panel(self) -> None:
         if self._news_panel is None:
@@ -783,7 +856,7 @@ class GoldSilverApp(App[None]):
     def _refresh_status_bar(self) -> None:
         try:
             bar = self.query_one("#status-bar", Static)
-        except Exception:
+        except NoMatches:
             return
         style = STATUS_STYLES.get(self._connection_status, "#7a7a8a")
         if self._last_tick_at is None:
@@ -852,94 +925,7 @@ class GoldSilverApp(App[None]):
         self.push_screen(TradeSimulatorScreen())
 
     def action_reports(self) -> None:
-        screen = ReportWatchlistScreen(
-            self._settings.report,
-            on_change=self._on_report_settings_change,
-            on_generate=self._action_generate_reports,
-            on_open=self._open_report,
-            on_retry=self._retry_report,
-            on_delete=self._delete_report,
-            recent=self._report_runs[:20],
-            generating=sorted(self._report_service.in_flight()),
-        )
-        self._report_screen = screen
-        self.push_screen(screen, self._on_report_screen_closed)
-
-    def _on_report_screen_closed(self, _result: None) -> None:
-        self._report_screen = None
-
-    def _on_report_settings_change(self) -> None:
-        self._persist_settings()
-        if self._settings.report.enabled and self._report_scheduler is None:
-            self._start_report_scheduler()
-        elif not self._settings.report.enabled and self._report_scheduler is not None:
-            self._report_scheduler.request_stop()
-            self._report_scheduler = None
-
-    def _start_report_scheduler(self) -> None:
-        if self._report_scheduler is not None:
-            return
-        scheduler = ReportScheduler(
-            self._report_service,
-            enabled=lambda: self._settings.report.enabled,
-            interval_minutes=lambda: self._settings.report.interval_minutes,
-        )
-        self._report_scheduler = scheduler
-        self.run_worker(
-            scheduler.run_loop(),
-            exclusive=True,
-            group="report-scheduler",
-        )
-
-    def _action_generate_reports(self) -> None:
-        self._run_reports(self._report_service.effective_watchlist(), replace=True)
-
-    def _retry_report(self, symbol: str) -> None:
-        tickers = self._report_service.resolve_tickers([symbol])
-        self._run_reports(tickers, replace=False)
-
-    def _run_reports(self, tickers: list, *, replace: bool) -> None:
-        symbols = [t.symbol for t in tickers]
-        if self._report_screen is not None:
-            if replace:
-                self._report_screen.mark_generating(symbols)
-            else:
-                self._report_screen.add_generating(symbols)
-        self.run_worker(
-            self._generate_reports(list(tickers), symbols),
-            exclusive=False,
-            group="report-generate",
-        )
-
-    async def _generate_reports(self, tickers: list, symbols: list[str]) -> None:
-        self.notify(f"Generating {len(symbols)} report(s)…", timeout=3)
-        runs = await self._report_service.run_all(tickers)
-        if self._report_screen is not None:
-            self._report_screen.clear_generating(symbols)
-        ok = sum(1 for r in runs if r.html_path)
-        self.notify(f"Reports done: {ok}/{len(runs)}", timeout=5)
-
-    def _on_report_done(self, run: ReportRun) -> None:
-        self._report_runs = [r for r in self._report_runs if r.ticker != run.ticker]
-        self._report_runs.insert(0, run)
-        del self._report_runs[50:]
-        if self._report_screen is not None:
-            self._report_screen.mark_done(run)
-
-    def _delete_report(self, run: ReportRun) -> None:
-        root = self._report_service.out_root()
-        delete_report(root, run.html_path)
-        self._report_runs = [r for r in self._report_runs if r is not run]
-        write_index(root)
-
-    def _open_report(self, run: ReportRun) -> None:
-        if not run.html_path:
-            return
-        path = self._report_service.out_root() / run.html_path
-        try:
-            webbrowser.open(path.resolve().as_uri())
-        except OSError:
-            self.notify("Could not open report", severity="error", timeout=5)
+        self._reports.open_screen()
 
     async def _on_simulator_enabled(self) -> None:
         self._start_simulator_replay()
@@ -970,6 +956,8 @@ class GoldSilverApp(App[None]):
         today_local = stockholm_now().date()
         mom = mom_cls()
         rec = rec_cls()
+        self._apply_overrides_to(mom)
+        self._apply_overrides_to(rec)
         for bar in bars:
             m = mom.observe(symbol, bar.close, bar.time)
             r = rec.observe(symbol, bar.close, bar.time)
@@ -1012,9 +1000,15 @@ class GoldSilverApp(App[None]):
             self._settings.save()
         except OSError:
             pass
+        if strategy_name in (
+            self._settings.marker_momentum_strategy,
+            self._settings.marker_recoil_strategy,
+        ):
+            self._seed_all()
 
     async def action_refresh(self) -> None:
         self._connection_status = "reconnecting"
+        self._disconnect_dismissed = False
         self._refresh_status_bar()
         await self._service.stop()
         self._service.start()
@@ -1024,10 +1018,13 @@ class GoldSilverApp(App[None]):
         await self._news_service.refresh_now()
         await self._trump_service.refresh_now()
         await self._omx_service.refresh_now()
+        await self._futures_service.refresh_now()
         await self._stock_service.refresh_now()
         await self._congress_service.refresh_now()
         await self._insider_service.refresh_now()
         await self._stocktwits_service.refresh_now()
+        await self._yields_service.refresh_now()
+        self._seed_all()
 
     def action_cycle_zoom(self) -> None:
         if self._chart_mode != "live":
@@ -1096,139 +1093,15 @@ class GoldSilverApp(App[None]):
             pass
 
     def _on_settings_change(self, settings: PlotSettings) -> None:
-        timeframe_changed = settings.timeframe_index != self._timeframe_index
-        feature_changed = (
-            settings.chart_kind != self._chart_kind
-            or settings.show_sma != self._show_sma
-            or settings.show_vwap != self._show_vwap
-            or settings.show_day_refs != self._show_day_refs
-        )
-        dual_changed = settings.show_dual_charts != self._settings.show_dual_charts
-        kind2_changed = settings.chart_kind2 != self._settings.chart_kind2
-        news_changed = (
-            settings.show_news_markets != self._settings.show_news_markets
-            or settings.show_news_trump != self._settings.show_news_trump
-        )
-        congress_changed = (
-            settings.show_congress_trades != self._settings.show_congress_trades
-        )
-        insider_changed = (
-            settings.show_insider_trades != self._settings.show_insider_trades
-        )
-        stocktwits_changed = settings.show_stocktwits != self._settings.show_stocktwits
-        gold_changed = settings.gold_color_name != self._settings.gold_color_name
-        silver_changed = settings.silver_color_name != self._settings.silver_color_name
-        columns_changed = settings.metals_columns != self._settings.metals_columns
-
-        visible_changed = settings.visible_signals != self._settings.visible_signals
-        markers_changed = (
-            settings.marker_momentum_strategy != self._settings.marker_momentum_strategy
-            or settings.marker_recoil_strategy != self._settings.marker_recoil_strategy
-        )
-        mini_tiles_changed = settings.mini_tiles != self._settings.mini_tiles
-        stock_row_visible_changed = (
-            settings.show_stock_row != self._settings.show_stock_row
-        )
-        stock_tickers_changed = settings.stock_tickers != self._settings.stock_tickers
-
-        self._timeframe_index = settings.timeframe_index
-        self._chart_kind = settings.chart_kind
-        self._show_sma = settings.show_sma
-        self._show_vwap = settings.show_vwap
-        self._show_day_refs = settings.show_day_refs
-        self._settings.timeframe_index = settings.timeframe_index
-        self._settings.chart_kind = settings.chart_kind
-        self._settings.show_dual_charts = settings.show_dual_charts
-        self._settings.chart_kind2 = settings.chart_kind2
-        self._settings.show_sma = settings.show_sma
-        self._settings.show_vwap = settings.show_vwap
-        self._settings.show_day_refs = settings.show_day_refs
-        self._settings.show_news_markets = settings.show_news_markets
-        self._settings.show_news_trump = settings.show_news_trump
-        self._settings.show_congress_trades = settings.show_congress_trades
-        self._settings.show_insider_trades = settings.show_insider_trades
-        self._settings.show_stocktwits = settings.show_stocktwits
-        self._settings.show_stock_row = settings.show_stock_row
-        self._settings.gold_color_name = settings.gold_color_name
-        self._settings.silver_color_name = settings.silver_color_name
-        self._settings.metals_columns = settings.metals_columns
-        self._settings.visible_signals = dict(settings.visible_signals)
-        self._settings.marker_momentum_strategy = settings.marker_momentum_strategy
-        self._settings.marker_recoil_strategy = settings.marker_recoil_strategy
-        self._settings.mini_tiles = list(settings.mini_tiles)
-        self._settings.stock_tickers = list(settings.stock_tickers)
-        try:
-            self._settings.save()
-        except OSError:
-            pass
-
-        if news_changed:
-            self._apply_news_panel()
-        if congress_changed and self._congress_panel is not None:
-            self._congress_panel.display = self._settings.show_congress_trades
-        if insider_changed and self._insider_panel is not None:
-            self._insider_panel.display = self._settings.show_insider_trades
-        if stocktwits_changed and self._stocktwits_panel is not None:
-            self._stocktwits_panel.display = self._settings.show_stocktwits
-        if gold_changed:
-            for panel in (self._panels[GOLD], self._dup_panels[GOLD]):
-                panel.set_accent(self._settings.gold_rgb())
-        if silver_changed:
-            for panel in (self._panels[SILVER], self._dup_panels[SILVER]):
-                panel.set_accent(self._settings.silver_rgb())
-        if columns_changed:
-            self._apply_metals_columns()
-        if visible_changed:
-            self._sync_visible_signals()
-        if mini_tiles_changed:
-            self._apply_mini_tiles()
-        if stock_tickers_changed:
-            self._stock_service.set_tickers(list(self._settings.stock_tickers))
-            self._stock_service.start()
-            if self._stock_row is not None:
-                self._stock_row.apply_tickers(list(self._settings.stock_tickers))
-            if self._settings.stock_tickers:
-                self.run_worker(
-                    self._stock_service.refresh_now(),
-                    exclusive=False,
-                    group="stock-refresh",
-                )
-        if (
-            stock_row_visible_changed or stock_tickers_changed
-        ) and self._stock_row is not None:
-            self._stock_row.display = bool(
-                self._settings.show_stock_row and self._settings.stock_tickers
-            )
-
-        if dual_changed:
-            for panel in self._dup_panels.values():
-                panel.display = self._settings.show_dual_charts
-
-        if timeframe_changed:
-            self._refresh_status_bar()
-            self._seed_all()
-            return
-        if dual_changed and self._settings.show_dual_charts:
-            self._seed_all()
-        elif feature_changed or kind2_changed:
-            for symbol in self._panels:
-                for panel, kind in self._symbol_panels_with_kind(symbol):
-                    panel.apply_chart_features(
-                        chart_kind=kind,
-                        show_sma=self._show_sma,
-                        show_vwap=self._show_vwap,
-                        show_day_refs=self._show_day_refs,
-                    )
-        if markers_changed:
-            self._seed_all()
+        apply_settings_change(self, settings)
 
     def _apply_param_overrides(self) -> None:
-        for name, kv in self._settings.signal_params.items():
-            strategy = self._strategy_by_name.get(name)
-            if strategy is None:
-                continue
-            for key, value in kv.items():
-                strategy.set_param(key, value)
+        for strategy in self._strategies:
+            self._apply_overrides_to(strategy)
+
+    def _apply_overrides_to(self, strategy: SignalStrategy) -> None:
+        for key, value in self._settings.signal_params.get(strategy.name, {}).items():
+            strategy.set_param(key, value)
 
     def _sync_visible_signals(self) -> None:
         names = [

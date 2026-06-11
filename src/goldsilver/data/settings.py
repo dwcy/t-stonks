@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Literal
 
+from goldsilver.fsutil import atomic_write_text
 from goldsilver.reports.constants import (
     CONCURRENCY_BOUNDS,
     DEFAULT_ALLOWED_TOOLS,
@@ -62,11 +63,14 @@ ALLOWED_MINI_TILES: tuple[str, ...] = (
     "BTC",
     "BRENT",
     "COPPER",
+    "RATIO",
+    "DXY",
+    "REALYIELD",
 )
 
 
 def _default_mini_tiles() -> list[str]:
-    return ["USDSEK", "CADSEK", "EURSEK", "COPPER", "BTC", "BRENT"]
+    return ["USDSEK", "CADSEK", "EURSEK", "COPPER", "BTC", "BRENT", "RATIO"]
 
 
 SellMode = Literal["all", "percent"]
@@ -83,6 +87,9 @@ class SimulatorSettings:
     sell_mode: SellMode = "all"
     sell_pct: float = 0.50
     trigger_mode: TriggerMode = "either"
+    stop_loss_pct: float = 0.0
+    take_profit_pct: float = 0.0
+    trailing_stop_pct: float = 0.0
 
     def __post_init__(self) -> None:
         if not isinstance(self.enabled, bool):
@@ -109,6 +116,14 @@ class SimulatorSettings:
             self.sell_pct = 0.50
         if self.trigger_mode not in ("both", "either"):
             self.trigger_mode = "either"
+        for attr in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct"):
+            try:
+                v = float(getattr(self, attr))
+            except (TypeError, ValueError):
+                v = 0.0
+            if not (0.0 <= v <= 50.0):
+                v = 0.0
+            setattr(self, attr, v)
 
 
 def _default_report_tickers() -> list[str]:
@@ -137,6 +152,7 @@ class ReportSettings:
     enabled: bool = False
     interval_minutes: int = DEFAULT_INTERVAL_MINUTES
     report_tickers: list[str] = field(default_factory=_default_report_tickers)
+    report_excluded: list[str] = field(default_factory=list)
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
     max_concurrency: int = DEFAULT_MAX_CONCURRENCY
     allowed_tools: list[str] = field(default_factory=_default_allowed_tools)
@@ -167,6 +183,20 @@ class ReportSettings:
                 seen.add(t)
                 cleaned.append(t)
             self.report_tickers = cleaned
+        if not isinstance(self.report_excluded, list):
+            self.report_excluded = []
+        else:
+            excluded: list[str] = []
+            seen_ex: set[str] = set()
+            for raw in self.report_excluded:
+                if not isinstance(raw, str):
+                    continue
+                t = raw.strip().upper()
+                if not t or t in seen_ex:
+                    continue
+                seen_ex.add(t)
+                excluded.append(t)
+            self.report_excluded = excluded
         if not isinstance(self.allowed_tools, list):
             self.allowed_tools = _default_allowed_tools()
         else:
@@ -253,6 +283,9 @@ class AppSettings:
     )
     marker_momentum_strategy: str = ""
     marker_recoil_strategy: str = ""
+    price_alerts: dict[str, list[float]] = field(default_factory=dict)
+    beep_on_buy: bool = False
+    beep_on_sell: bool = False
     simulator: SimulatorSettings = field(default_factory=SimulatorSettings)
     report: ReportSettings = field(default_factory=ReportSettings)
     calendar: CalendarSettings = field(default_factory=CalendarSettings)
@@ -321,6 +354,23 @@ class AppSettings:
                 str(k): float(v) for k, v in kv.items() if isinstance(v, (int, float))
             }
         self.signal_params = clean_params
+        clean_alerts: dict[str, list[float]] = {}
+        if isinstance(self.price_alerts, dict):
+            for sym, levels in self.price_alerts.items():
+                if sym not in ("XAU", "XAG") or not isinstance(levels, list):
+                    continue
+                vals = sorted(
+                    {
+                        float(v)
+                        for v in levels
+                        if isinstance(v, (int, float)) and float(v) > 0
+                    }
+                )
+                if vals:
+                    clean_alerts[sym] = vals
+        self.price_alerts = clean_alerts
+        self.beep_on_buy = bool(self.beep_on_buy)
+        self.beep_on_sell = bool(self.beep_on_sell)
         if not isinstance(self.simulator, SimulatorSettings):
             if isinstance(self.simulator, dict):
                 allowed_sim = {f.name for f in fields(SimulatorSettings)}
@@ -377,7 +427,7 @@ class AppSettings:
     def save(self) -> None:
         path = settings_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
+        atomic_write_text(path, json.dumps(asdict(self), indent=2))
 
     def gold_rgb(self) -> tuple[int, int, int]:
         return GOLD_PRESETS.get(self.gold_color_name, GOLD_PRESETS[DEFAULT_GOLD])

@@ -8,7 +8,15 @@ from typing import Literal
 
 
 TradeSide = Literal["BUY", "SELL"]
-TradeReason = Literal["signal_buy", "signal_sell", "eod_liquidation", "manual_reset"]
+TradeReason = Literal[
+    "signal_buy",
+    "signal_sell",
+    "eod_liquidation",
+    "manual_reset",
+    "stop_loss",
+    "take_profit",
+    "trailing_stop",
+]
 SellMode = Literal["all", "percent"]
 TriggerMode = Literal["both", "either"]
 ConsensusAction = Literal["BUY", "SELL", "NONE"]
@@ -19,6 +27,7 @@ class Position:
     symbol: str
     units: float = 0.0
     avg_cost: float = 0.0
+    high_water: float = 0.0
 
     @property
     def cost_basis(self) -> float:
@@ -102,3 +111,7 @@ class SimulatorSummary:
     sell_pct: float
     trigger_mode: TriggerMode
     liquidated_for_day: bool
+    max_drawdown: float = 0.0
+    win_rate: float | None = None
+    avg_win: float | None = None
+    avg_loss: float | None = None

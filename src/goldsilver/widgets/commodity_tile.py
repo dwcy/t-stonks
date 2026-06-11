@@ -7,17 +7,20 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from goldsilver.data.models_macro import CommodityQuote, CommoditySymbol
+from goldsilver.widgets.format import DOWN_COLOR, FLAT_COLOR, MUTED_COLOR, UP_COLOR
 
 
 _LABEL: dict[CommoditySymbol, str] = {
     "BRENT": "Oil",
     "COPPER": "Copper",
     "BTC": "BTC",
+    "DXY": "DXY",
 }
 _CURRENCY: dict[CommoditySymbol, str] = {
     "BRENT": "USD",
     "COPPER": "USD",
     "BTC": "USD",
+    "DXY": "USD",
 }
 
 
@@ -46,25 +49,27 @@ class CommodityTile(Static):
     def _redraw(self) -> None:
         label = _LABEL.get(self._symbol, self._symbol)
         if self.quote is None:
-            self.update(Text(f"{label} loading…", style="#7a7a8a"))
+            self.update(Text(f"{label} loading…", style=FLAT_COLOR))
             return
         quote = self.quote
         change = quote.change
         pct = quote.change_percent
         flat = abs(change) < 0.001
         arrow = "▬" if flat else ("▲" if change > 0 else "▼")
-        color = "#7a7a8a" if flat else ("#7dff8c" if change > 0 else "#ff6b6b")
+        color = FLAT_COLOR if flat else (UP_COLOR if change > 0 else DOWN_COLOR)
         sign = "" if change < 0 else ("+" if not flat else " ")
         price_str = (
             f"{quote.price:,.0f}" if quote.price >= 1000 else f"{quote.price:.2f}"
         )
         line = Text.assemble(
             (f"{arrow} ", color),
-            (f"{label} ", "#a0a0b0"),
+            (f"{label} ", MUTED_COLOR),
             (f"{sign}{pct:.2f}% ", color),
             (price_str, "bold #e0e0e8"),
         )
         if self.stale_since is not None:
             local = self.stale_since.astimezone()
-            line.append(f"  · stale {local.strftime('%H:%M')}", style="dim #ff6b6b")
+            line.append(
+                f"  · stale {local.strftime('%H:%M')}", style=f"dim {DOWN_COLOR}"
+            )
         self.update(line)

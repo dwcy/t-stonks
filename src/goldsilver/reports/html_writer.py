@@ -5,6 +5,7 @@ from __future__ import annotations
 import html as _html
 from pathlib import Path
 
+from goldsilver.fsutil import atomic_write_text as _atomic_write_text
 from goldsilver.reports.constants import safe_name
 from goldsilver.reports.models import ReportRun, ReportStatus
 
@@ -61,8 +62,8 @@ def write_report(out_root: Path, run: ReportRun, html: str | None) -> ReportRun:
         body = _error_shell(run, None)
 
     run.html_path = rel_html
-    target.write_text(body, encoding="utf-8")
-    (out_root / rel_json).write_text(run.model_dump_json(indent=2), encoding="utf-8")
+    _atomic_write_text(target, body)
+    _atomic_write_text(out_root / rel_json, run.model_dump_json(indent=2))
     return run
 
 
@@ -167,5 +168,5 @@ def write_index(out_root: Path) -> Path:
     )
     index = out_root / "index.html"
     out_root.mkdir(parents=True, exist_ok=True)
-    index.write_text(doc, encoding="utf-8")
+    _atomic_write_text(index, doc)
     return index

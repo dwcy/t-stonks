@@ -94,13 +94,13 @@ class StockService:
 def _fetch_batch(tickers: list[str]) -> list[StockQuote]:
     out: list[StockQuote] = []
     for sym in tickers:
-        quote = _fetch_single(sym)
+        quote = fetch_single_quote(sym)
         if quote is not None:
             out.append(quote)
     return out
 
 
-def _fetch_single(sym: str) -> StockQuote | None:
+def fetch_single_quote(sym: str) -> StockQuote | None:
     try:
         ticker = yf.Ticker(sym)
         intraday = ticker.history(period="5d", interval="5m")

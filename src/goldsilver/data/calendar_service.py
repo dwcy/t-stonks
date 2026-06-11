@@ -15,6 +15,7 @@ from goldsilver.data.calendar_actuals import (
     merge_event,
 )
 from goldsilver.data.calendar_static import load_static_events, window_around
+from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import (
     CalendarDay,
     CalendarEvent,
@@ -102,7 +103,7 @@ class CalendarService:
                 setattr(self, attr, None)
 
     async def refresh_now(self) -> None:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with make_client(timeout=10.0) as client:
             await self._refresh_once(client)
 
     async def fetch_actuals_now(self, event: CalendarEvent) -> CalendarEvent | None:
@@ -130,7 +131,7 @@ class CalendarService:
         )
 
     async def _run(self) -> None:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with make_client(timeout=10.0) as client:
             await self._refresh_once(client)
             while not self._stop.is_set():
                 try:

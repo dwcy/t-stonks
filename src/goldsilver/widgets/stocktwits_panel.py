@@ -10,26 +10,11 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from goldsilver.data.models_macro import StockTwitMessage
+from goldsilver.widgets.format import format_age
 
 
 _TICKER_TAG_RE = re.compile(r"^(?:\$[A-Z][A-Z0-9._]*\s+)+")
 _WHITESPACE_RE = re.compile(r"\s+")
-
-
-def _format_age(seconds: int) -> str:
-    if seconds < 0:
-        seconds = 0
-    if seconds < 60:
-        return f"{seconds}s"
-    if seconds < 3600:
-        return f"{seconds // 60}m"
-    if seconds < 86400:
-        h, rem = divmod(seconds, 3600)
-        m = rem // 60
-        return f"{h}h" if m == 0 else f"{h}h {m}m"
-    d, rem = divmod(seconds, 86400)
-    h = rem // 3600
-    return f"{d}d" if h == 0 else f"{d}d {h}h"
 
 
 def _clean_body(body: str) -> str:
@@ -95,19 +80,17 @@ class StockTwitsPanel(VerticalScroll):
             latest = max(m.created_at for m in self.messages).astimezone()
             self.border_subtitle = f"latest {latest.strftime('%H:%M')}"
 
-    def _render_message(
-        self, text: Text, msg: StockTwitMessage, now: datetime
-    ) -> None:
-        age = _format_age(int((now - msg.created_at).total_seconds()))
+    def _render_message(self, text: Text, msg: StockTwitMessage, now: datetime) -> None:
+        age = format_age(int((now - msg.created_at).total_seconds()))
         sentiment_style = (
-            "bold #7dff8c" if msg.sentiment == "BULL"
-            else "bold #ff6b6b" if msg.sentiment == "BEAR"
+            "bold #7dff8c"
+            if msg.sentiment == "BULL"
+            else "bold #ff6b6b"
+            if msg.sentiment == "BEAR"
             else "dim #5a5a6a"
         )
         sentiment_label = (
-            "▲" if msg.sentiment == "BULL"
-            else "▼" if msg.sentiment == "BEAR"
-            else "·"
+            "▲" if msg.sentiment == "BULL" else "▼" if msg.sentiment == "BEAR" else "·"
         )
         body_clean = _clean_body(msg.body)
         if len(body_clean) > self._body_chars:

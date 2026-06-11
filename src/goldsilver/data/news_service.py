@@ -10,6 +10,7 @@ from xml.etree import ElementTree as ET
 import httpx
 from pydantic import ValidationError
 
+from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import NewsItem, NewsSource
 
 
@@ -178,13 +179,13 @@ class _FeedService:
             self._task = None
 
     async def refresh_now(self) -> None:
-        async with httpx.AsyncClient(
+        async with make_client(
             headers=_HEADERS, timeout=10.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)
 
     async def _run(self) -> None:
-        async with httpx.AsyncClient(
+        async with make_client(
             headers=_HEADERS, timeout=10.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)
