@@ -1,0 +1,64 @@
+"""Default stock watchlist presets: OMXS30 constituents plus hand-picked Stockholm extras."""
+
+from __future__ import annotations
+
+# OMXS30 composition as of the Dec 2025 index review (Yahoo Finance tickers).
+PRESET_STOCKS: tuple[tuple[str, str], ...] = (
+    ("ABB.ST", "ABB Ltd"),
+    ("ADDT-B.ST", "Addtech B"),
+    ("ALFA.ST", "Alfa Laval"),
+    ("ASSA-B.ST", "Assa Abloy B"),
+    ("ATCO-A.ST", "Atlas Copco A"),
+    ("AZN.ST", "AstraZeneca"),
+    ("BOL.ST", "Boliden"),
+    ("EPI-A.ST", "Epiroc A"),
+    ("EQT.ST", "EQT"),
+    ("ERIC-B.ST", "Ericsson B"),
+    ("ESSITY-B.ST", "Essity B"),
+    ("EVO.ST", "Evolution"),
+    ("HEXA-B.ST", "Hexagon B"),
+    ("HM-B.ST", "Hennes & Mauritz B"),
+    ("INDU-C.ST", "Industrivärden C"),
+    ("INVE-B.ST", "Investor B"),
+    ("LIFCO-B.ST", "Lifco B"),
+    ("NDA-SE.ST", "Nordea Bank"),
+    ("NIBE-B.ST", "NIBE Industrier B"),
+    ("SAAB-B.ST", "Saab B"),
+    ("SAND.ST", "Sandvik"),
+    ("SCA-B.ST", "SCA B"),
+    ("SEB-A.ST", "SEB A"),
+    ("SHB-A.ST", "Handelsbanken A"),
+    ("SKA-B.ST", "Skanska B"),
+    ("SKF-B.ST", "SKF B"),
+    ("SWED-A.ST", "Swedbank A"),
+    ("TEL2-B.ST", "Tele2 B"),
+    ("TELIA.ST", "Telia Company"),
+    ("VOLV-B.ST", "Volvo B"),
+    ("RUSTA.ST", "Rusta"),
+    ("CLA-B.ST", "Cloetta B"),
+    ("SBB-B.ST", "SBB B"),
+    ("BURE.ST", "Bure Equity"),
+    ("KINV-B.ST", "Kinnevik B"),
+    ("VSURE.ST", "Verisure"),
+    ("SINCH.ST", "Sinch"),
+)
+
+PRESET_TICKERS: frozenset[str] = frozenset(t for t, _ in PRESET_STOCKS)
+
+
+def extra_row_tickers(
+    enabled_presets: list[str],
+    extra_tickers: list[str],
+    exclude: list[str] | None = None,
+) -> list[str]:
+    excluded = set(exclude or [])
+    out: list[str] = []
+    for ticker, _ in PRESET_STOCKS:
+        if ticker in enabled_presets and ticker not in excluded:
+            out.append(ticker)
+            excluded.add(ticker)
+    for ticker in extra_tickers:
+        if ticker not in excluded:
+            out.append(ticker)
+            excluded.add(ticker)
+    return out

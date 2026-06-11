@@ -50,6 +50,7 @@ from goldsilver.data.models_macro import (
 )
 from goldsilver.data.models_futures import FuturesSnapshot
 from goldsilver.data.settings import AppSettings
+from goldsilver.data.stock_presets import extra_row_tickers
 from goldsilver.data.signal_strategies import (
     SignalStrategy,
     STRATEGY_REGISTRY,
@@ -189,8 +190,9 @@ class GoldSilverApp(App[None]):
         self._futures_strip: FuturesStrip | None = None
         self._futures_service = FuturesService(handler=self._on_futures)
         self._stock_row: StockRow | None = None
+        self._extra_stock_row: StockRow | None = None
         self._stock_service = StockService(
-            tickers=list(self._settings.stock_tickers),
+            tickers=[*self._settings.stock_tickers, *self._extra_row_tickers()],
             handler=self._on_stock_quotes,
             stale_handler=self._on_stock_stale,
         )
@@ -291,6 +293,12 @@ class GoldSilverApp(App[None]):
             if not self._settings.show_stock_row or not self._settings.stock_tickers:
                 stock_row.display = False
             yield stock_row
+            extra_tickers = self._extra_row_tickers()
+            extra_row = StockRow(extra_tickers)
+            self._extra_stock_row = extra_row
+            if not self._settings.show_stock_row or not extra_tickers:
+                extra_row.display = False
+            yield extra_row
             with Grid(
                 id="metals",
                 classes=f"cards-{self._settings.metals_columns}",
@@ -809,13 +817,24 @@ class GoldSilverApp(App[None]):
         else:
             self._futures_strip.mark_stale(snapshot.fetched_at)
 
+    def _extra_row_tickers(self) -> list[str]:
+        return extra_row_tickers(
+            self._settings.enabled_preset_tickers,
+            self._settings.extra_stock_tickers,
+            exclude=self._settings.stock_tickers,
+        )
+
     async def _on_stock_quotes(self, quotes: list[StockQuote]) -> None:
         if self._stock_row is not None:
             self._stock_row.apply_quotes(quotes)
+        if self._extra_stock_row is not None:
+            self._extra_stock_row.apply_quotes(quotes)
 
     async def _on_stock_stale(self, since: datetime) -> None:
         if self._stock_row is not None:
             self._stock_row.mark_stale(since)
+        if self._extra_stock_row is not None:
+            self._extra_stock_row.mark_stale(since)
 
     async def _on_congress_trades(self, trades: list[CongressTrade]) -> None:
         if self._congress_panel is None:
@@ -902,6 +921,8 @@ class GoldSilverApp(App[None]):
             marker_recoil_strategy=self._settings.marker_recoil_strategy,
             mini_tiles=list(self._settings.mini_tiles),
             stock_tickers=list(self._settings.stock_tickers),
+            extra_stock_tickers=list(self._settings.extra_stock_tickers),
+            enabled_preset_tickers=list(self._settings.enabled_preset_tickers),
         )
         self.push_screen(
             PlotSettingsScreen(
