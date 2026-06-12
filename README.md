@@ -1,4 +1,4 @@
-# terminal-stock market 
+# t-stonks : The Gold & Silver + stock market tracking
 
 <img width="1725" height="2007" alt="image" src="https://github.com/user-attachments/assets/04baccf9-e7a3-492a-a3da-9be0ee227f2e" />
 
