@@ -1,4 +1,7 @@
-# gold-and-silver
+# terminal-stock market 
+
+<img width="1725" height="2007" alt="image" src="https://github.com/user-attachments/assets/04baccf9-e7a3-492a-a3da-9be0ee227f2e" />
+
 
 Real-time terminal dashboard streaming live gold & silver prices with sparkline charts.
 See [`CLAUDE.md`](CLAUDE.md) for architecture and the data-feed design.
