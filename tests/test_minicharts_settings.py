@@ -27,6 +27,7 @@ def _plot_settings(**overrides: object) -> PlotSettings:
         show_insider_trades=False,
         show_stocktwits=False,
         show_stock_row=True,
+        show_futures=True,
         gold_color_name="Classic Gold",
         silver_color_name="Pearl",
         metals_columns=2,

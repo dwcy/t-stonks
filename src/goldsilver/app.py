@@ -3,6 +3,7 @@
 # requirement); feature logic is delegated to settings_sync and report_controller.
 from __future__ import annotations
 
+import argparse
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import cast
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Grid, Horizontal, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.widgets import Footer, Header, Static
 
@@ -132,6 +133,7 @@ class GoldSilverApp(App[None]):
         Binding("r", "refresh", "Refresh"),
         Binding("z", "cycle_zoom", "Zoom"),
         Binding("h", "cycle_chart_mode", "Mode"),
+        Binding("w", "toggle_wide", "Wide"),
         Binding("x", "toggle_crosshair", "Crosshair"),
         Binding("left", "crosshair_left", "← cursor", show=False),
         Binding("right", "crosshair_right", "cursor →", show=False),
@@ -141,9 +143,11 @@ class GoldSilverApp(App[None]):
         Binding("c", "clear_pins", "Clear pins", show=False),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, *, force_wide: bool = False) -> None:
         super().__init__()
         self._settings = AppSettings.load()
+        if force_wide:
+            self._settings.wide_mode = True
         self._panels: dict[str, MetalPanel] = {}
         self._dup_panels: dict[str, MetalPanel] = {}
         self._fx_tiles: dict[FxPair, FxTile] = {}
@@ -258,118 +262,146 @@ class GoldSilverApp(App[None]):
         return TIMEFRAMES[self._timeframe_index][3]
 
     def compose(self) -> ComposeResult:
+        self._build_components()
         yield Header(show_clock=True)
-        with VerticalScroll(id="main-scroll"):
-            with Horizontal(id="macro-strip"):
-                for i, tile_id in enumerate(self._settings.mini_tiles):
-                    if i > 0:
-                        yield Static("|", classes="mini-sep")
-                    if tile_id in _FX_PAIR_IDS:
-                        pair = cast(FxPair, tile_id)
-                        fx_tile = FxTile(pair)
-                        self._fx_tiles[pair] = fx_tile
-                        yield fx_tile
-                    elif tile_id in _COMMODITY_IDS:
-                        symbol = cast(CommoditySymbol, tile_id)
-                        cm_tile = CommodityTile(symbol)
-                        self._commodity_tiles[symbol] = cm_tile
-                        yield cm_tile
-                    elif tile_id == _RATIO_ID:
-                        ratio_tile = RatioTile()
-                        self._ratio_tile = ratio_tile
-                        yield ratio_tile
-                    elif tile_id == _REAL_YIELD_ID:
-                        yield_tile = RealYieldTile()
-                        self._yield_tile = yield_tile
-                        yield yield_tile
-            omx = OmxStrip()
-            self._omx_strip = omx
-            yield omx
-            futures = FuturesStrip()
-            self._futures_strip = futures
-            yield futures
-            stock_row = StockRow(list(self._settings.stock_tickers))
-            stock_row.add_class("primary-stocks")
-            self._stock_row = stock_row
-            if not self._settings.show_stock_row or not self._settings.stock_tickers:
-                stock_row.display = False
-            yield stock_row
-            extra_tickers = self._extra_row_tickers()
-            extra_row = StockRow(extra_tickers)
-            self._extra_stock_row = extra_row
-            if not self._settings.show_stock_row or not extra_tickers:
-                extra_row.display = False
-            yield extra_row
-            with Grid(
-                id="metals",
-                classes=f"cards-{self._settings.metals_columns}",
-            ):
-                gold = MetalPanel(
-                    GOLD,
-                    "GOLD",
-                    accent_color=self._settings.gold_rgb(),
-                    classes="-gold",
-                )
-                silver = MetalPanel(
-                    SILVER,
-                    "SILVER",
-                    accent_color=self._settings.silver_rgb(),
-                    classes="-silver",
-                )
-                self._panels[GOLD] = gold
-                self._panels[SILVER] = silver
-                gold2 = MetalPanel(
-                    GOLD,
-                    "GOLD (2)",
-                    accent_color=self._settings.gold_rgb(),
-                    classes="-gold -dup",
-                )
-                silver2 = MetalPanel(
-                    SILVER,
-                    "SILVER (2)",
-                    accent_color=self._settings.silver_rgb(),
-                    classes="-silver -dup",
-                )
-                gold2.display = self._settings.show_dual_charts
-                silver2.display = self._settings.show_dual_charts
-                self._dup_panels[GOLD] = gold2
-                self._dup_panels[SILVER] = silver2
-                yield gold
-                yield silver
-                yield gold2
-                yield silver2
-            calendar = CalendarPanel(on_event_selected=self._show_calendar_event)
-            self._calendar_panel = calendar
-            yield calendar
-            news = NewsPanel("Markets news")
-            self._news_panel = news
-            yield news
-            stocktwits = StockTwitsPanel()
-            self._stocktwits_panel = stocktwits
-            if not self._settings.show_stocktwits:
-                stocktwits.display = False
-            yield stocktwits
-            insider = InsiderPanel()
-            self._insider_panel = insider
-            if not self._settings.show_insider_trades:
-                insider.display = False
-            yield insider
-            congress = CongressPanel("Congress trades")
-            self._congress_panel = congress
-            if not self._settings.show_congress_trades:
-                congress.display = False
-            yield congress
+        if self._settings.wide_mode:
+            yield from self._compose_wide()
+        else:
+            yield from self._compose_normal()
         yield Static("", id="status-bar")
         yield Footer()
+
+    def _build_components(self) -> None:
+        """Instantiate every panel/strip/row once and store refs.
+
+        Creation is kept separate from placement so the two layouts
+        (`_compose_normal` / `_compose_wide`) only rearrange prebuilt widgets.
+        """
+        s = self._settings
+        self._macro_strip = Horizontal(*self._macro_strip_widgets(), id="macro-strip")
+        self._macro_strip.display = bool(s.mini_tiles)
+        self._omx_strip = OmxStrip()
+        self._futures_strip = FuturesStrip()
+        self._futures_strip.display = s.show_futures
+        self._stock_row = StockRow(list(s.stock_tickers))
+        self._stock_row.add_class("primary-stocks")
+        if not s.show_stock_row or not s.stock_tickers:
+            self._stock_row.display = False
+        extra_tickers = self._extra_row_tickers()
+        self._extra_stock_row = StockRow(extra_tickers)
+        if not s.show_stock_row or not extra_tickers:
+            self._extra_stock_row.display = False
+        self._build_metals()
+        self._calendar_panel = CalendarPanel(
+            on_event_selected=self._show_calendar_event
+        )
+        self._news_panel = NewsPanel("Markets news")
+        self._stocktwits_panel = StockTwitsPanel()
+        if not s.show_stocktwits:
+            self._stocktwits_panel.display = False
+        self._insider_panel = InsiderPanel()
+        if not s.show_insider_trades:
+            self._insider_panel.display = False
+        self._congress_panel = CongressPanel("Congress trades")
+        if not s.show_congress_trades:
+            self._congress_panel.display = False
+
+    def _macro_strip_widgets(self) -> list[Static]:
+        self._fx_tiles.clear()
+        self._commodity_tiles.clear()
+        self._ratio_tile = None
+        self._yield_tile = None
+        widgets: list[Static] = []
+        for i, tile_id in enumerate(self._settings.mini_tiles):
+            if i > 0:
+                widgets.append(Static("|", classes="mini-sep"))
+            if tile_id in _FX_PAIR_IDS:
+                pair = cast(FxPair, tile_id)
+                fx_tile = FxTile(pair)
+                self._fx_tiles[pair] = fx_tile
+                widgets.append(fx_tile)
+            elif tile_id in _COMMODITY_IDS:
+                symbol = cast(CommoditySymbol, tile_id)
+                cm_tile = CommodityTile(symbol)
+                self._commodity_tiles[symbol] = cm_tile
+                widgets.append(cm_tile)
+            elif tile_id == _RATIO_ID:
+                self._ratio_tile = RatioTile()
+                widgets.append(self._ratio_tile)
+            elif tile_id == _REAL_YIELD_ID:
+                self._yield_tile = RealYieldTile()
+                widgets.append(self._yield_tile)
+        return widgets
+
+    def _build_metals(self) -> None:
+        s = self._settings
+        gold = MetalPanel(GOLD, "GOLD", accent_color=s.gold_rgb(), classes="-gold")
+        silver = MetalPanel(
+            SILVER, "SILVER", accent_color=s.silver_rgb(), classes="-silver"
+        )
+        gold2 = MetalPanel(
+            GOLD, "GOLD (2)", accent_color=s.gold_rgb(), classes="-gold -dup"
+        )
+        silver2 = MetalPanel(
+            SILVER, "SILVER (2)", accent_color=s.silver_rgb(), classes="-silver -dup"
+        )
+        gold2.display = s.show_dual_charts
+        silver2.display = s.show_dual_charts
+        self._panels = {GOLD: gold, SILVER: silver}
+        self._dup_panels = {GOLD: gold2, SILVER: silver2}
+        self._metals_grid = Grid(
+            gold,
+            silver,
+            gold2,
+            silver2,
+            id="metals",
+            classes=f"cards-{s.metals_columns}",
+        )
+
+    def _total_stock_tiles(self) -> int:
+        if not self._settings.show_stock_row:
+            return 0
+        return len(self._settings.stock_tickers) + len(self._extra_row_tickers())
+
+    def _compose_normal(self) -> ComposeResult:
+        with VerticalScroll(id="main-scroll"):
+            yield self._macro_strip
+            yield self._omx_strip
+            yield self._futures_strip
+            yield self._stock_row
+            yield self._extra_stock_row
+            yield self._metals_grid
+            yield self._calendar_panel
+            yield self._news_panel
+            yield self._stocktwits_panel
+            yield self._insider_panel
+            yield self._congress_panel
+
+    def _compose_wide(self) -> ComposeResult:
+        stocks_full_width = self._total_stock_tiles() > 6
+        with VerticalScroll(id="main-scroll"):
+            yield self._macro_strip
+            yield self._omx_strip
+            yield self._futures_strip
+            if stocks_full_width:
+                yield self._stock_row
+                yield self._extra_stock_row
+            with Horizontal(id="wide-split"):
+                with Vertical(id="wide-left"):
+                    if not stocks_full_width:
+                        yield self._stock_row
+                        yield self._extra_stock_row
+                    yield self._metals_grid
+                with Vertical(id="wide-right"):
+                    yield self._news_panel
+                    yield self._calendar_panel
+            yield self._stocktwits_panel
+            yield self._insider_panel
+            yield self._congress_panel
 
     async def on_mount(self) -> None:
         self._refresh_status_bar()
         self._sync_visible_signals()
-        try:
-            strip = self.query_one("#macro-strip", Horizontal)
-            strip.display = bool(self._settings.mini_tiles)
-        except NoMatches:
-            pass
         self._service.start()
         self._history_service.start()
         self._calendar_service.start()
@@ -378,7 +410,8 @@ class GoldSilverApp(App[None]):
         self._news_service.start()
         self._trump_service.start()
         self._omx_service.start()
-        self._futures_service.start()
+        if self._settings.show_futures:
+            self._futures_service.start()
         self._stock_service.start()
         self._congress_service.start()
         self._insider_service.start()
@@ -464,19 +497,27 @@ class GoldSilverApp(App[None]):
             bars = [b for b in bars if b.time.astimezone(timezone.utc) >= cutoff]
         elif self._timeframe_filter == "today":
             bars = _filter_to_stockholm_today(bars)
+        group = [(p, k) for p, k in group if p.is_mounted]
+        if not group:
+            return
         for panel, kind in group:
-            panel.seed_history(
-                bars,
-                chart_kind=kind,
-                show_sma=self._show_sma,
-                show_vwap=self._show_vwap,
-                show_day_refs=self._show_day_refs,
-            )
-            panel.set_chart_mode(self._chart_mode)
-            if self._chart_mode == "live":
-                is_dup = panel is self._dup_panels.get(symbol)
-                panel.set_chart_zoom(self._chart_zoom2 if is_dup else self._chart_zoom)
-            panel.clear_markers()
+            try:
+                panel.seed_history(
+                    bars,
+                    chart_kind=kind,
+                    show_sma=self._show_sma,
+                    show_vwap=self._show_vwap,
+                    show_day_refs=self._show_day_refs,
+                )
+                panel.set_chart_mode(self._chart_mode)
+                if self._chart_mode == "live":
+                    is_dup = panel is self._dup_panels.get(symbol)
+                    panel.set_chart_zoom(
+                        self._chart_zoom2 if is_dup else self._chart_zoom
+                    )
+                panel.clear_markers()
+            except NoMatches:
+                continue
         panels = [p for p, _ in group]
         self.run_worker(
             self._seed_stats(symbol, panels),
@@ -503,7 +544,10 @@ class GoldSilverApp(App[None]):
             heavy = rec_at is not None and rec_at[1] == action
             color = (125, 255, 140) if action == "BUY" else (255, 107, 107)
             for panel in panels:
-                panel.add_marker(price, ts, color, heavy=heavy)
+                try:
+                    panel.add_marker(price, ts, color, heavy=heavy)
+                except NoMatches:
+                    continue
 
     async def _seed_stats(self, symbol: str, panels: list[MetalPanel]) -> None:
         try:
@@ -522,14 +566,19 @@ class GoldSilverApp(App[None]):
         year_avg = sum(b.close for b in year) / len(year)
         ma200 = sum(b.close for b in bars[-200:]) / 200 if len(bars) >= 200 else None
         for panel in panels:
-            panel.set_stats(
-                week_high=week_high,
-                week_low=week_low,
-                week_avg=week_avg,
-                month_avg=month_avg,
-                year_avg=year_avg,
-                ma200=ma200,
-            )
+            if not panel.is_mounted:
+                continue
+            try:
+                panel.set_stats(
+                    week_high=week_high,
+                    week_low=week_low,
+                    week_avg=week_avg,
+                    month_avg=month_avg,
+                    year_avg=year_avg,
+                    ma200=ma200,
+                )
+            except NoMatches:
+                continue
 
     async def _on_tick(self, tick: Tick) -> None:
         self._last_tick_at = tick.time
@@ -758,34 +807,7 @@ class GoldSilverApp(App[None]):
         except NoMatches:
             return
         strip.remove_children()
-        self._fx_tiles.clear()
-        self._commodity_tiles.clear()
-        self._ratio_tile = None
-        self._yield_tile = None
-        new_widgets: list[
-            FxTile | CommodityTile | RatioTile | RealYieldTile | Static
-        ] = []
-        for i, tile_id in enumerate(self._settings.mini_tiles):
-            if i > 0:
-                new_widgets.append(Static("|", classes="mini-sep"))
-            if tile_id in _FX_PAIR_IDS:
-                pair = cast(FxPair, tile_id)
-                ft = FxTile(pair)
-                self._fx_tiles[pair] = ft
-                new_widgets.append(ft)
-            elif tile_id in _COMMODITY_IDS:
-                symbol = cast(CommoditySymbol, tile_id)
-                ct = CommodityTile(symbol)
-                self._commodity_tiles[symbol] = ct
-                new_widgets.append(ct)
-            elif tile_id == _RATIO_ID:
-                rt = RatioTile()
-                self._ratio_tile = rt
-                new_widgets.append(rt)
-            elif tile_id == _REAL_YIELD_ID:
-                yt = RealYieldTile()
-                self._yield_tile = yt
-                new_widgets.append(yt)
+        new_widgets = self._macro_strip_widgets()
         if new_widgets:
             strip.mount(*new_widgets)
         strip.display = bool(new_widgets)
@@ -914,6 +936,7 @@ class GoldSilverApp(App[None]):
             show_insider_trades=self._settings.show_insider_trades,
             show_stocktwits=self._settings.show_stocktwits,
             show_stock_row=self._settings.show_stock_row,
+            show_futures=self._settings.show_futures,
             gold_color_name=self._settings.gold_color_name,
             silver_color_name=self._settings.silver_color_name,
             metals_columns=self._settings.metals_columns,
@@ -1040,7 +1063,8 @@ class GoldSilverApp(App[None]):
         await self._news_service.refresh_now()
         await self._trump_service.refresh_now()
         await self._omx_service.refresh_now()
-        await self._futures_service.refresh_now()
+        if self._settings.show_futures:
+            await self._futures_service.refresh_now()
         await self._stock_service.refresh_now()
         await self._congress_service.refresh_now()
         await self._insider_service.refresh_now()
@@ -1065,6 +1089,39 @@ class GoldSilverApp(App[None]):
         self._persist_settings()
         self._refresh_status_bar()
         self._seed_all()
+
+    def action_toggle_wide(self) -> None:
+        self._settings.wide_mode = not self._settings.wide_mode
+        self._persist_settings()
+        self.run_worker(
+            self._rebuild_layout(), exclusive=True, group="layout-rebuild"
+        )
+
+    async def _rebuild_layout(self) -> None:
+        await self.recompose()
+        self.call_after_refresh(self._after_layout_rebuild)
+
+    def _after_layout_rebuild(self) -> None:
+        self._sync_visible_signals()
+        self._apply_news_panel()
+        self._update_ratio_tile()
+        self._update_yield_tile()
+        self._seed_all()
+        self.run_worker(
+            self._refresh_context_feeds(), exclusive=False, group="ctx-refresh"
+        )
+        self._refresh_status_bar()
+
+    async def _refresh_context_feeds(self) -> None:
+        await self._omx_service.refresh_now()
+        if self._settings.show_futures:
+            await self._futures_service.refresh_now()
+        await self._stock_service.refresh_now()
+        await self._calendar_service.refresh_now()
+        await self._congress_service.refresh_now()
+        await self._insider_service.refresh_now()
+        await self._stocktwits_service.refresh_now()
+        await self._yields_service.refresh_now()
 
     def action_toggle_crosshair(self) -> None:
         if self._chart_mode != "live":
@@ -1141,10 +1198,17 @@ def _filter_to_stockholm_today(bars: list[Bar]) -> list[Bar]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(prog="goldsilver")
+    parser.add_argument(
+        "--wide",
+        action="store_true",
+        help="force wide (ultrawide) layout regardless of saved setting",
+    )
+    args = parser.parse_args()
     if not sys.stdout.isatty():
         print("ok")
         return
-    GoldSilverApp().run()
+    GoldSilverApp(force_wide=args.wide).run()
 
 
 if __name__ == "__main__":

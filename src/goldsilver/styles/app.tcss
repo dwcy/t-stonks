@@ -8,6 +8,24 @@ Screen {
     height: 1fr;
 }
 
+#wide-split {
+    layout: horizontal;
+    width: 100%;
+    height: auto;
+}
+
+#wide-left {
+    width: 66%;
+    height: auto;
+    padding: 0 1 0 0;
+}
+
+#wide-right {
+    width: 34%;
+    height: auto;
+    padding: 0 0 0 1;
+}
+
 Header {
     background: #14141c;
     color: #ffd56b;
