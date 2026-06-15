@@ -123,9 +123,14 @@ def _fetch_batch(tickers: list[str]) -> list[StockQuote]:
 
 
 def fetch_single_quote(sym: str) -> StockQuote | None:
+    daily_fallback = False
     try:
         ticker = yf.Ticker(sym)
         intraday = ticker.history(period="5d", interval="5m")
+        if intraday is None or len(intraday) == 0:
+            # Illiquid names (e.g. TSX Venture .V) have no 5m bars; fall back to daily.
+            intraday = ticker.history(period="1mo", interval="1d")
+            daily_fallback = True
     except Exception:
         return None
     if intraday is None or len(intraday) == 0:
@@ -142,16 +147,20 @@ def fetch_single_quote(sym: str) -> StockQuote | None:
     if latest_ts.tzinfo is None:
         latest_ts = latest_ts.replace(tzinfo=timezone.utc)
 
-    latest_date = latest_ts.date()
-    today_closes: list[float] = []
-    prior_close = closes[0]
-    for ts, close in zip(timestamps, closes):
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        if ts.date() == latest_date:
-            today_closes.append(close)
-        else:
-            prior_close = close
+    if daily_fallback:
+        prior_close = closes[-2] if len(closes) >= 2 else closes[0]
+        today_closes = list(closes)
+    else:
+        latest_date = latest_ts.date()
+        today_closes = []
+        prior_close = closes[0]
+        for ts, close in zip(timestamps, closes):
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            if ts.date() == latest_date:
+                today_closes.append(close)
+            else:
+                prior_close = close
 
     price = closes[-1]
     fast_price: float | None = None
