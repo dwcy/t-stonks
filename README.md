@@ -12,6 +12,17 @@ The goal is simple:
 
 ---
 
+## Install and run
+
+```bash
+uv sync
+uv run goldsilver
+```
+
+Quit with `q`.
+
+---
+
 ## What it gives you
 
 * **Live gold & silver tracking**
@@ -76,17 +87,6 @@ No heavy web app. No backend. No database. Just a focused local market cockpit.
 
 ---
 
-## Install and run
-
-```bash
-uv sync
-uv run goldsilver
-```
-
-Quit with `q`.
-
----
-
 ## Main controls
 
 | Key | Action           |
@@ -99,6 +99,7 @@ Quit with `q`.
 | `r` | Refresh          |
 | `z` | Cycle zoom       |
 | `h` | Cycle chart mode |
+| `w` | Wide mode        |
 | `x` | Toggle crosshair |
 
 ---
