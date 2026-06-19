@@ -7,6 +7,7 @@ import webbrowser
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from goldsilver.reports.claude_runner import find_claude
 from goldsilver.reports.html_writer import delete_report, load_recent_runs, write_index
 from goldsilver.reports.models import ReportRun, ReportTicker
 from goldsilver.reports.report_service import ReportService
@@ -16,7 +17,7 @@ from goldsilver.reports.verdict_tracker import (
     fetch_daily_closes,
     yf_symbol_for_run,
 )
-from goldsilver.widgets import ReportWatchlistScreen
+from goldsilver.widgets import ReportUnavailableScreen, ReportWatchlistScreen
 
 if TYPE_CHECKING:
     from goldsilver.app import GoldSilverApp
@@ -34,6 +35,9 @@ class ReportController:
         self._screen: ReportWatchlistScreen | None = None
 
     def open_screen(self) -> None:
+        if find_claude() is None:
+            self._app.push_screen(ReportUnavailableScreen())
+            return
         screen = ReportWatchlistScreen(
             self._app._settings.report,
             on_change=self._on_settings_change,
