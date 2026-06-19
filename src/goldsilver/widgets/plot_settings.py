@@ -55,6 +55,7 @@ class PlotSettings:
     show_insider_trades: bool
     show_stocktwits: bool
     show_stock_row: bool
+    show_futures: bool
     gold_color_name: str
     silver_color_name: str
     metals_columns: int
@@ -220,6 +221,15 @@ class PlotSettingsScreen(ModalScreen[None]):
                     "StockTwits chatter",
                     classes="switch-label",
                 )
+            with Horizontal(classes="switch-row"):
+                yield Switch(
+                    value=self._state.show_futures,
+                    id="setting-futures",
+                )
+                yield Label(
+                    "Futures (termins) row",
+                    classes="switch-label",
+                )
         with Vertical(classes="setting-group"):
             yield Label("Mini tiles", classes="setting-label")
             with Vertical(id="mini-tiles-list"):
@@ -379,6 +389,9 @@ class PlotSettingsScreen(ModalScreen[None]):
             self._emit()
         elif sw_id == "setting-stocktwits" and v != self._state.show_stocktwits:
             self._state.show_stocktwits = v
+            self._emit()
+        elif sw_id == "setting-futures" and v != self._state.show_futures:
+            self._state.show_futures = v
             self._emit()
         elif sw_id.startswith("setting-show-"):
             for name in self._strategy_names:

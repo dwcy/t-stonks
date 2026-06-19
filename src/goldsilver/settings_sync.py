@@ -30,6 +30,7 @@ def apply_settings_change(app: GoldSilverApp, settings: PlotSettings) -> None:
     )
     insider_changed = settings.show_insider_trades != app._settings.show_insider_trades
     stocktwits_changed = settings.show_stocktwits != app._settings.show_stocktwits
+    futures_changed = settings.show_futures != app._settings.show_futures
     gold_changed = settings.gold_color_name != app._settings.gold_color_name
     silver_changed = settings.silver_color_name != app._settings.silver_color_name
     columns_changed = settings.metals_columns != app._settings.metals_columns
@@ -65,6 +66,7 @@ def apply_settings_change(app: GoldSilverApp, settings: PlotSettings) -> None:
     app._settings.show_insider_trades = settings.show_insider_trades
     app._settings.show_stocktwits = settings.show_stocktwits
     app._settings.show_stock_row = settings.show_stock_row
+    app._settings.show_futures = settings.show_futures
     app._settings.gold_color_name = settings.gold_color_name
     app._settings.silver_color_name = settings.silver_color_name
     app._settings.metals_columns = settings.metals_columns
@@ -88,6 +90,21 @@ def apply_settings_change(app: GoldSilverApp, settings: PlotSettings) -> None:
         app._insider_panel.display = app._settings.show_insider_trades
     if stocktwits_changed and app._stocktwits_panel is not None:
         app._stocktwits_panel.display = app._settings.show_stocktwits
+    if futures_changed and app._futures_strip is not None:
+        app._futures_strip.display = app._settings.show_futures
+        if app._settings.show_futures:
+            app._futures_service.start()
+            app.run_worker(
+                app._futures_service.refresh_now(),
+                exclusive=False,
+                group="futures-refresh",
+            )
+        else:
+            app.run_worker(
+                app._futures_service.stop(),
+                exclusive=False,
+                group="futures-stop",
+            )
     if gold_changed:
         for panel in (app._panels[GOLD], app._dup_panels[GOLD]):
             panel.set_accent(app._settings.gold_rgb())

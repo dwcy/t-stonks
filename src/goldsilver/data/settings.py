@@ -288,6 +288,8 @@ class AppSettings:
     show_insider_trades: bool = False
     show_stocktwits: bool = False
     show_stock_row: bool = True
+    show_futures: bool = True
+    wide_mode: bool = False
     gold_color_name: str = DEFAULT_GOLD
     silver_color_name: str = DEFAULT_SILVER
     metals_columns: int = 2
@@ -322,6 +324,8 @@ class AppSettings:
         if self.chart_kind2 not in ("line", "candle"):
             self.chart_kind2 = "candle"
         self.show_dual_charts = bool(self.show_dual_charts)
+        self.show_futures = bool(self.show_futures)
+        self.wide_mode = bool(self.wide_mode)
         if not isinstance(self.stock_tickers, list):
             self.stock_tickers = _default_stock_tickers()
         else:

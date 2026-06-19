@@ -30,6 +30,16 @@ class _FakeTicker:
         return self._fi
 
 
+class _NoIntradayTicker(_FakeTicker):
+    def history(self, period: str, interval: str) -> pd.DataFrame:
+        if interval == "5m":
+            return pd.DataFrame()
+        idx = pd.to_datetime(
+            ["2026-06-05", "2026-06-06", "2026-06-09"], utc=True
+        )
+        return pd.DataFrame({"Close": [22.10, 23.19, 23.70]}, index=idx)
+
+
 def test_fetch_single_prefers_fast_info(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         stock_service.yf, "Ticker", lambda _s: _FakeTicker(21.5, 20.75, "CAD")
@@ -54,3 +64,18 @@ def test_fetch_single_falls_back_to_intraday(monkeypatch: pytest.MonkeyPatch) ->
     assert quote is not None
     assert quote.price == 19.50
     assert quote.previous_close == 19.46
+
+
+def test_fetch_single_falls_back_to_daily_when_no_intraday(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        stock_service.yf, "Ticker", lambda _s: _NoIntradayTicker(23.70, None, "CAD")
+    )
+
+    quote = stock_service.fetch_single_quote("LUNR.V")
+
+    assert quote is not None
+    assert quote.price == 23.70
+    assert quote.previous_close == 23.19
+    assert quote.intraday_closes == (22.10, 23.19, 23.70)
