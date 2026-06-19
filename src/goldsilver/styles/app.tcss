@@ -669,6 +669,12 @@ ReportWatchlistScreen .report-spinner {
     color: #ffd56b;
 }
 
+ReportUnavailableScreen .report-unavailable-line {
+    width: 100%;
+    height: auto;
+    color: #d0d0e0;
+}
+
 #report-actions {
     height: 3;
     margin-top: 1;
