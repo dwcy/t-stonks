@@ -123,7 +123,9 @@ def test_prune_drops_only_stale_records(tmp_path: Path) -> None:
 async def test_refresh_no_longer_wipes_released_figures(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    event = _event()
+    event = _event().model_copy(
+        update={"scheduled_time": datetime.now(timezone.utc) + timedelta(days=1)}
+    )
     store = CalendarActualsStore(tmp_path / "actuals.json")
     store.put(_released(event))
     monkeypatch.setattr(
