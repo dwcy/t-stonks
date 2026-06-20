@@ -1,7 +1,7 @@
 [project]
 name = "goldsilver"
 version = "0.1.0"
-description = "Add your description here"
+description = "Fast terminal TUI for live gold & silver, macro drivers, stocks, futures, FX, news and trading signals, with AI-assisted market reports."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
