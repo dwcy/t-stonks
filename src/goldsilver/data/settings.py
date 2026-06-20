@@ -89,6 +89,32 @@ def _default_mini_tiles() -> list[str]:
     return ["USDSEK", "CADSEK", "EURSEK", "COPPER", "BTC", "BRENT", "RATIO"]
 
 
+def _default_insider_tickers() -> list[str]:
+    return ["DJT:0001849635"]
+
+
+def _clean_insider_tickers(raw: object) -> list[str]:
+    """Keep only well-formed ``TICKER:CIK`` entries (CIK all digits), deduped."""
+    if not isinstance(raw, list):
+        return _default_insider_tickers()
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        ticker, _, cik = item.partition(":")
+        ticker = ticker.strip().upper()
+        cik = cik.strip()
+        if not ticker or not cik.isdigit():
+            continue
+        entry = f"{ticker}:{cik}"
+        if entry in seen:
+            continue
+        seen.add(entry)
+        cleaned.append(entry)
+    return cleaned
+
+
 SellMode = Literal["all", "percent"]
 TriggerMode = Literal["both", "either"]
 
@@ -297,6 +323,7 @@ class AppSettings:
     extra_stock_tickers: list[str] = field(default_factory=list)
     enabled_preset_tickers: list[str] = field(default_factory=list)
     mini_tiles: list[str] = field(default_factory=_default_mini_tiles)
+    insider_tickers: list[str] = field(default_factory=_default_insider_tickers)
     visible_signals: dict[str, bool] = field(default_factory=_default_visible_signals)
     signal_params: dict[str, dict[str, float]] = field(
         default_factory=_default_signal_params
@@ -361,6 +388,7 @@ class AppSettings:
                 seen_tiles.add(raw)
                 cleaned_tiles.append(raw)
             self.mini_tiles = cleaned_tiles
+        self.insider_tickers = _clean_insider_tickers(self.insider_tickers)
         from goldsilver.data.signal_strategies import (
             DEFAULT_MARKER_MOMENTUM,
             DEFAULT_MARKER_RECOIL,
@@ -458,6 +486,13 @@ class AppSettings:
         path = settings_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_text(path, json.dumps(asdict(self), indent=2))
+
+    def insider_ticker_pairs(self) -> tuple[tuple[str, str], ...]:
+        pairs: list[tuple[str, str]] = []
+        for entry in self.insider_tickers:
+            ticker, _, cik = entry.partition(":")
+            pairs.append((ticker, cik))
+        return tuple(pairs)
 
     def gold_rgb(self) -> tuple[int, int, int]:
         return GOLD_PRESETS.get(self.gold_color_name, GOLD_PRESETS[DEFAULT_GOLD])

@@ -210,6 +210,7 @@ class GoldSilverApp(App[None]):
         self._insider_service = InsiderTradesService(
             handler=self._on_insider_trades,
             stale_handler=self._on_insider_stale,
+            tickers=self._settings.insider_ticker_pairs(),
         )
         self._stocktwits_panel: StockTwitsPanel | None = None
         self._stocktwits_service = StockTwitsService(
@@ -1093,9 +1094,7 @@ class GoldSilverApp(App[None]):
     def action_toggle_wide(self) -> None:
         self._settings.wide_mode = not self._settings.wide_mode
         self._persist_settings()
-        self.run_worker(
-            self._rebuild_layout(), exclusive=True, group="layout-rebuild"
-        )
+        self.run_worker(self._rebuild_layout(), exclusive=True, group="layout-rebuild")
 
     async def _rebuild_layout(self) -> None:
         await self.recompose()
