@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -17,15 +18,21 @@ InsiderTradesHandler = Callable[[list[InsiderTrade]], Awaitable[None] | None]
 InsiderTradesStaleHandler = Callable[[datetime], Awaitable[None] | None]
 
 INSIDER_REFRESH_INTERVAL_S = 1800.0
-INSIDER_TICKERS_DEFAULT: tuple[tuple[str, str], ...] = (("DJT", "0001849635"),)
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 ARCHIVES_BASE = "https://www.sec.gov/Archives/edgar/data"
 
-_USER_AGENT = "gold-and-silver TUI dawid@bahnhof.se"
-_HEADERS = {
-    "User-Agent": _USER_AGENT,
-    "Accept": "application/json, application/xml, text/xml, */*",
-}
+# SEC's fair-access policy asks for a contact in the User-Agent. Read it from
+# the environment so no personal address is baked into the source.
+SEC_CONTACT_ENV = "GOLDSILVER_SEC_CONTACT"
+_DEFAULT_USER_AGENT = "gold-and-silver-tui"
+_ACCEPT = "application/json, application/xml, text/xml, */*"
+
+
+def _headers() -> dict[str, str]:
+    contact = os.environ.get(SEC_CONTACT_ENV, "").strip()
+    agent = f"{_DEFAULT_USER_AGENT} ({contact})" if contact else _DEFAULT_USER_AGENT
+    return {"User-Agent": agent, "Accept": _ACCEPT}
+
 
 _BUY_CODES = {"P"}
 _SELL_CODES = {"S"}
@@ -37,7 +44,7 @@ class InsiderTradesService:
         handler: InsiderTradesHandler | None = None,
         stale_handler: InsiderTradesStaleHandler | None = None,
         *,
-        tickers: tuple[tuple[str, str], ...] = INSIDER_TICKERS_DEFAULT,
+        tickers: tuple[tuple[str, str], ...] = (),
         refresh_interval_s: float = INSIDER_REFRESH_INTERVAL_S,
         max_items: int = 40,
         max_filings_per_ticker: int = 25,
@@ -69,13 +76,13 @@ class InsiderTradesService:
 
     async def refresh_now(self) -> None:
         async with make_client(
-            headers=_HEADERS, timeout=20.0, follow_redirects=True
+            headers=_headers(), timeout=20.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)
 
     async def _run(self) -> None:
         async with make_client(
-            headers=_HEADERS, timeout=20.0, follow_redirects=True
+            headers=_headers(), timeout=20.0, follow_redirects=True
         ) as client:
             await self._refresh_once(client)
             while not self._stop.is_set():
