@@ -1,0 +1,39 @@
+Screen {
+    background: $surface;
+}
+
+#body {
+    padding: 1 2;
+}
+
+.section-title {
+    color: #9b59ff;
+    text-style: bold;
+    margin: 1 0 0 0;
+}
+
+#etf-row,
+#stock-row {
+    height: auto;
+}
+
+.stock-tile {
+    width: 1fr;
+    height: 7;
+    padding: 0 1;
+}
+
+.etf-tile {
+    height: 8;
+    border: round #3a3a4a;
+}
+
+#news-scroll {
+    height: 1fr;
+    border: round #3a3a4a;
+    padding: 0 1;
+}
+
+#news-panel {
+    height: auto;
+}

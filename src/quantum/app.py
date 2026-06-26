@@ -1,0 +1,136 @@
+"""QuantumApp — Textual dashboard for quantum ETFs, pure-play stocks, and news."""
+
+from __future__ import annotations
+
+import argparse
+from datetime import datetime
+
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.widgets import Footer, Header, Label
+
+from marketcore.models_macro import NewsItem, StockQuote
+from marketcore.services.news_service import NewsService
+from marketcore.services.stock_service import StockService, register_names
+from marketcore.widgets.stock_tile import StockTile
+
+from quantum.data.news_feeds import QUANTUM_NEWS_FEEDS
+from quantum.data.presets import NAME_OVERRIDES
+from quantum.data.settings import QuantumSettings
+
+
+class QuantumApp(App[None]):
+    CSS_PATH = "styles/app.tcss"
+    TITLE = "quantum"
+    SUB_TITLE = "quantum ETFs · pure-play stocks · news"
+
+    BINDINGS = [
+        Binding("q", "quit", "Quit"),
+        Binding("r", "refresh", "Refresh"),
+    ]
+
+    def __init__(self, *, force_wide: bool = False) -> None:
+        super().__init__()
+        self._force_wide = force_wide
+        self._settings = QuantumSettings.load()
+        register_names(NAME_OVERRIDES)
+
+        self._tiles: dict[str, StockTile] = {}
+        self._news_panel_ready = False
+
+        tickers = [*self._settings.etf_tickers, *self._settings.stock_tickers]
+        self._stock_service = StockService(
+            tickers=tickers,
+            handler=self._on_stock_quotes,
+            stale_handler=self._on_stock_stale,
+            refresh_interval_s=self._settings.refresh_interval_s,
+        )
+        self._news_service: NewsService | None = None
+        if self._settings.news_enabled:
+            self._news_service = NewsService(
+                QUANTUM_NEWS_FEEDS,
+                handler=self._on_news,
+                stale_handler=self._on_news_stale,
+            )
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Vertical(id="body"):
+            yield Label("Quantum ETFs", classes="section-title")
+            with Horizontal(id="etf-row"):
+                for ticker in self._settings.etf_tickers:
+                    tile = StockTile(ticker)
+                    tile.add_class("etf-tile")
+                    self._tiles[ticker] = tile
+                    yield tile
+            yield Label("Pure-play quantum stocks", classes="section-title")
+            with Horizontal(id="stock-row"):
+                for ticker in self._settings.stock_tickers:
+                    tile = StockTile(ticker)
+                    self._tiles[ticker] = tile
+                    yield tile
+            if self._settings.news_enabled:
+                yield Label("Quantum news", classes="section-title")
+                with VerticalScroll(id="news-scroll"):
+                    from quantum.widgets.news_panel import QuantumNewsPanel
+
+                    yield QuantumNewsPanel()
+        yield Footer()
+
+    async def on_mount(self) -> None:
+        self._news_panel_ready = self._settings.news_enabled
+        self._stock_service.start()
+        if self._news_service is not None:
+            self._news_service.start()
+
+    async def on_unmount(self) -> None:
+        await self._stock_service.stop()
+        if self._news_service is not None:
+            await self._news_service.stop()
+
+    def _on_stock_quotes(self, quotes: list[StockQuote]) -> None:
+        for quote in quotes:
+            tile = self._tiles.get(quote.ticker)
+            if tile is not None:
+                tile.apply_quote(quote)
+
+    def _on_stock_stale(self, since: datetime) -> None:
+        for tile in self._tiles.values():
+            tile.mark_stale(since)
+
+    def _on_news(self, items: list[NewsItem]) -> None:
+        panel = self._news_panel()
+        if panel is not None:
+            panel.apply_items(items)
+
+    def _on_news_stale(self, since: datetime) -> None:
+        panel = self._news_panel()
+        if panel is not None:
+            panel.mark_stale(since)
+
+    def _news_panel(self):
+        from quantum.widgets.news_panel import QuantumNewsPanel
+
+        if not self._news_panel_ready:
+            return None
+        try:
+            return self.query_one(QuantumNewsPanel)
+        except Exception:
+            return None
+
+    async def action_refresh(self) -> None:
+        await self._stock_service.refresh_now()
+        if self._news_service is not None:
+            await self._news_service.refresh_now()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="quantum")
+    parser.add_argument("--force-wide", action="store_true", help="force wide layout")
+    args = parser.parse_args()
+    QuantumApp(force_wide=args.force_wide).run()
+
+
+if __name__ == "__main__":
+    main()

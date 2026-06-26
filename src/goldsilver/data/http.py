@@ -1,20 +1,7 @@
-"""Shared httpx client factory so every feed gets uniform timeout and pooling policy."""
+"""Facade: re-exports the shared httpx client factory from marketcore."""
 
 from __future__ import annotations
 
-import httpx
+from marketcore.http import DEFAULT_TIMEOUT_S, make_client
 
-DEFAULT_TIMEOUT_S = 10.0
-
-
-def make_client(
-    *,
-    headers: dict[str, str] | None = None,
-    timeout: float = DEFAULT_TIMEOUT_S,
-    follow_redirects: bool = False,
-) -> httpx.AsyncClient:
-    return httpx.AsyncClient(
-        headers=headers,
-        timeout=timeout,
-        follow_redirects=follow_redirects,
-    )
+__all__ = ["DEFAULT_TIMEOUT_S", "make_client"]

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Literal
+
+from marketcore import paths as marketcore_paths
 
 from goldsilver.fsutil import atomic_write_text
 from goldsilver.reports.constants import (
@@ -19,6 +20,8 @@ from goldsilver.reports.constants import (
     TIMEOUT_BOUNDS,
 )
 
+
+APP_NAME = "goldsilver"
 
 ChartKind = Literal["line", "candle"]
 ChartZoom = Literal["24h", "3h", "1h"]
@@ -503,15 +506,9 @@ class AppSettings:
         )
 
 
-def _config_base() -> Path:
-    if os.name == "nt":
-        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-
-
 def settings_path() -> Path:
-    return _config_base() / "goldsilver" / "settings.json"
+    return marketcore_paths.settings_path(APP_NAME)
 
 
 def trades_path() -> Path:
-    return _config_base() / "goldsilver" / "trades.json"
+    return marketcore_paths.trades_path(APP_NAME)
