@@ -6,7 +6,16 @@ from __future__ import annotations
 ETF_DEFAULTS: tuple[str, ...] = ("QTUM", "ARKQ")
 
 # Pure-play quantum-computing stocks rendered as a tile grid.
-PUREPLAY_DEFAULTS: tuple[str, ...] = ("IONQ", "RGTI", "QUBT", "QBTS", "ARQQ")
+PUREPLAY_DEFAULTS: tuple[str, ...] = (
+    "IONQ",
+    "RGTI",
+    "QUBT",
+    "QBTS",
+    "ARQQ",
+    "LAES",
+    "QMCO",
+    "QSI",
+)
 
 ACCENT_PRESETS: dict[str, tuple[int, int, int]] = {
     "quantum-violet": (155, 89, 255),
@@ -23,4 +32,7 @@ NAME_OVERRIDES: dict[str, str] = {
     "QUBT": "Quantum Computing Inc",
     "QBTS": "D-Wave Quantum",
     "ARQQ": "Arqit Quantum",
+    "LAES": "SEALSQ",
+    "QMCO": "Quantum Corp",
+    "QSI": "Quantum-Si",
 }

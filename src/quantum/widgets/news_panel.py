@@ -37,8 +37,10 @@ class QuantumNewsPanel(Static):
         now = datetime.now(timezone.utc)
         text = Text()
         for item in self._items:
+            local = item.published.astimezone()
             age = int((now - item.published).total_seconds())
+            text.append(f"{local.strftime('%m-%d %H:%M')} ", style="#7a7a8a")
+            text.append(f"{format_age(age):>5} ", style=f"dim {MUTED_COLOR}")
             text.append(f"{item.source:<11} ", style=f"bold {MUTED_COLOR}")
-            text.append(f"{format_age(age):>5}  ", style=f"dim {MUTED_COLOR}")
             text.append(f"{item.title}\n", style="#e0e0e8")
         return text

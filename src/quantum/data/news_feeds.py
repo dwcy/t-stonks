@@ -14,8 +14,8 @@ QUANTUM_NEWS_FEEDS: tuple[FeedEntry, ...] = (
         "https://news.google.com/rss/search?q=when:24h+%22quantum+computing%22&hl=en-US&gl=US&ceid=US:en",
     ),
     (
-        "QC-Market",
-        "https://news.google.com/rss/search?q=when:24h+(IonQ+OR+Rigetti+OR+QTUM+OR+%22quantum+stock%22)&hl=en-US&gl=US&ceid=US:en",
+        "QC-Stocks",
+        "https://news.google.com/rss/search?q=when:48h+(IonQ+OR+Rigetti+OR+%22D-Wave%22+OR+%22Quantum+Computing+Inc%22+OR+Arqit+OR+SEALSQ+OR+%22Quantum+Si%22+OR+QTUM+OR+%22quantum+stock%22)&hl=en-US&gl=US&ceid=US:en",
     ),
     (
         "QC-Research",
