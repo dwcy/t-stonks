@@ -43,3 +43,6 @@ Thumbs.db
 
 # Claude Code (local-only)
 .claude/settings.local.json
+
+# Prompt-lib tool output (local-only)
+/docs/okf/
