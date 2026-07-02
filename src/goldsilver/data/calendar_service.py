@@ -13,6 +13,7 @@ from goldsilver.data.calendar_actuals import (
     ActualsFetcher,
     due_events,
     merge_event,
+    same_day_titles,
 )
 from goldsilver.data.calendar_actuals_store import CalendarActualsStore
 from goldsilver.data.calendar_static import load_static_events, window_around
@@ -119,7 +120,12 @@ class CalendarService:
             return None
         self._ensure_fetcher()
         assert self._actuals_fetcher is not None
-        updated = await self._actuals_fetcher.fetch(event)
+        siblings = (
+            same_day_titles(self._last_snapshot, event)
+            if self._last_snapshot is not None
+            else ()
+        )
+        updated = await self._actuals_fetcher.fetch(event, siblings)
         if updated is None:
             return None
         self._actuals_store.put(updated)
@@ -283,7 +289,8 @@ class CalendarService:
         if not pending:
             return
         results = await asyncio.gather(
-            *(fetcher.fetch(e) for e in pending), return_exceptions=True
+            *(fetcher.fetch(e, same_day_titles(snapshot, e)) for e in pending),
+            return_exceptions=True,
         )
         updated = [r for r in results if isinstance(r, CalendarEvent)]
         if not updated:

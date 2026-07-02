@@ -72,9 +72,24 @@ def _to_analysis(raw: ReleasedAnalysis | None) -> EventAnalysis | None:
     )
 
 
-def build_actuals_prompt(event: CalendarEvent) -> str:
+def build_actuals_prompt(
+    event: CalendarEvent, same_day_events: tuple[str, ...] = ()
+) -> str:
     local = event.scheduled_time.astimezone(STOCKHOLM)
     when = local.strftime("%Y-%m-%d %H:%M %Z")
+    same_day_note = ""
+    if same_day_events:
+        listed = "; ".join(same_day_events)
+        same_day_note = (
+            "\n\nOther HIGH/MED-importance releases scheduled the same day: "
+            f"{listed}. Check whether the actual market reaction was driven by one "
+            "of these instead (e.g. a monthly payrolls/employment report outweighs "
+            "a routine weekly claims print, or a bigger surprise elsewhere overrides "
+            "a marginal beat/miss here). If so, your directional call must reflect "
+            "the dominant, combined reaction rather than this print's mechanical "
+            "read in isolation, and the rationale should name which release actually "
+            "drove the move."
+        )
     return (
         "You are a markets data assistant. Find the OFFICIAL released figures for this "
         "specific scheduled macro-economic release, using web search/fetch of primary "
@@ -86,13 +101,21 @@ def build_actuals_prompt(event: CalendarEvent) -> str:
         "previous value. For a rate decision, the 'actual' is the new policy rate (or "
         "the decision, e.g. 'hold 4.25%'). Keep each value short (e.g. '3.2%', "
         "'+250k', '4.25%'). Write a one-sentence plain-language summary.\n\n"
-        "Then assess the market impact of THIS print in isolation. Compare the actual "
-        'to the consensus to set "surprise" to above, below, or inline. Give the '
-        "likely directional impact on gold, silver, and the US dollar as bullish, "
-        "bearish, or neutral (e.g. a hotter-than-expected CPI is usd bullish and gold "
-        "bearish via higher-for-longer rate expectations; metals are non-yielding and "
-        "move inversely to real yields and the dollar). Write a one- or two-sentence "
-        "rationale naming the transmission to the dollar and to the metals.\n\n"
+        "Then assess the market impact, checking how gold, silver, and the dollar "
+        "actually moved around this release rather than assuming the textbook "
+        'mechanical read. Compare the actual to the consensus to set "surprise" to '
+        "above, below, or inline. Give the likely directional impact on gold, "
+        "silver, and the US dollar as bullish, bearish, or neutral (e.g. a "
+        "hotter-than-expected CPI is usd bullish and gold bearish via "
+        "higher-for-longer rate expectations; metals are non-yielding and move "
+        "inversely to real yields and the dollar). A small beat or miss on a "
+        "routine/secondary release is a weak signal on its own and can easily be "
+        "overridden by other same-day data, wages, yields, or Fed-pricing — lean "
+        "toward neutral rather than a strong call unless the surprise itself is "
+        f"large.{same_day_note}\n\n"
+        "Write a one- or two-sentence rationale naming the transmission to the "
+        "dollar and to the metals, and note explicitly if the move was actually "
+        "driven by a different same-day release rather than this one.\n\n"
         "If the release has not actually happened yet or you cannot confirm the figures "
         'from a primary source, set "found": false and leave the values null.\n\n'
         "Output ONLY a single HTML comment on its own line, nothing else, exactly in "
@@ -104,6 +127,25 @@ def build_actuals_prompt(event: CalendarEvent) -> str:
         "rate-cut-delay odds, supporting the dollar and pressuring non-yielding gold "
         'and silver."}} -->'
     )
+
+
+def same_day_titles(
+    snapshot: CalendarSnapshot, event: CalendarEvent
+) -> tuple[str, ...]:
+    """Titles of other HIGH/MED events scheduled the same calendar day as ``event``."""
+    target = _event_key(event)
+    target_date = event.scheduled_time.astimezone(STOCKHOLM).date()
+    titles: list[str] = []
+    for day in snapshot.days:
+        if day.date != target_date:
+            continue
+        for sibling in day.events:
+            if _event_key(sibling) == target:
+                continue
+            if sibling.importance not in FETCHABLE_IMPORTANCE:
+                continue
+            titles.append(sibling.title)
+    return tuple(titles)
 
 
 def parse_released(text: str) -> ReleasedFigures | None:
@@ -145,14 +187,16 @@ class ActualsFetcher:
     def should_fetch(self, event: CalendarEvent) -> bool:
         return self._key(event) not in self._dispatched
 
-    async def fetch(self, event: CalendarEvent) -> CalendarEvent | None:
+    async def fetch(
+        self, event: CalendarEvent, same_day_events: tuple[str, ...] = ()
+    ) -> CalendarEvent | None:
         key = self._key(event)
         if key in self._dispatched:
             return None
         self._dispatched.add(key)
         async with self._sem:
             result: ClaudeResult = await run_claude(
-                build_actuals_prompt(event),
+                build_actuals_prompt(event, same_day_events),
                 allowed_tools=ACTUALS_ALLOWED_TOOLS,
                 timeout_seconds=self._timeout_seconds,
             )

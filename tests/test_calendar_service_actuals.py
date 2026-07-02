@@ -102,6 +102,94 @@ async def test_fetch_actuals_now_works_when_disabled(
 
 
 @pytest.mark.asyncio
+async def test_fetch_actuals_now_passes_same_day_sibling_into_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured_prompts: list[str] = []
+
+    async def fake_run_claude(prompt: str, **_kwargs: object) -> ClaudeResult:
+        captured_prompts.append(prompt)
+        return ClaudeResult(status=ReportStatus.SUCCESS, html=_SAMPLE)
+
+    monkeypatch.setattr(calendar_actuals, "run_claude", fake_run_claude)
+    monkeypatch.setattr(calendar_service, "find_claude", lambda: "claude")
+
+    service = CalendarService(
+        actuals_settings_provider=lambda: CalendarSettings(actuals_enabled=False),
+        actuals_store=CalendarActualsStore(tmp_path / "actuals.json"),
+    )
+    now = datetime.now(STOCKHOLM)
+    today = now.date()
+    claims = CalendarEvent(
+        source="FED",
+        title="Unemployment Insurance Weekly Claims Report",
+        scheduled_time=now - timedelta(hours=1),
+        importance="MED",
+    )
+    payrolls = CalendarEvent(
+        source="FED",
+        title="Employment Situation",
+        scheduled_time=now - timedelta(hours=1),
+        importance="HIGH",
+    )
+    service._last_snapshot = CalendarSnapshot(
+        days=(CalendarDay(date=today, bucket="today", events=(claims, payrolls)),),
+        fetched_at=datetime.now(timezone.utc),
+        status="ok",
+    )
+
+    await service.fetch_actuals_now(claims)
+
+    assert len(captured_prompts) == 1
+    assert "Employment Situation" in captured_prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_check_due_passes_same_day_sibling_into_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured_prompts: list[str] = []
+
+    async def fake_run_claude(prompt: str, **_kwargs: object) -> ClaudeResult:
+        captured_prompts.append(prompt)
+        return ClaudeResult(status=ReportStatus.SUCCESS, html=_SAMPLE)
+
+    monkeypatch.setattr(calendar_actuals, "run_claude", fake_run_claude)
+    monkeypatch.setattr(calendar_service, "find_claude", lambda: "claude")
+
+    service = CalendarService(
+        actuals_settings_provider=lambda: CalendarSettings(actuals_enabled=True),
+        actuals_store=CalendarActualsStore(tmp_path / "actuals.json"),
+    )
+    now = datetime.now(STOCKHOLM)
+    today = now.date()
+    claims = CalendarEvent(
+        source="FED",
+        title="Unemployment Insurance Weekly Claims Report",
+        scheduled_time=now - timedelta(hours=1),
+        importance="MED",
+    )
+    payrolls = CalendarEvent(
+        source="FED",
+        title="Employment Situation",
+        scheduled_time=now - timedelta(hours=1),
+        importance="HIGH",
+    )
+    service._last_snapshot = CalendarSnapshot(
+        days=(CalendarDay(date=today, bucket="today", events=(claims, payrolls)),),
+        fetched_at=datetime.now(timezone.utc),
+        status="ok",
+    )
+
+    await service._check_due()
+
+    assert len(captured_prompts) == 2
+    joined = "\n".join(captured_prompts)
+    assert "Employment Situation" in joined
+    assert "Unemployment Insurance Weekly Claims Report" in joined
+
+
+@pytest.mark.asyncio
 async def test_check_due_disabled_does_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
