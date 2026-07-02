@@ -22,6 +22,9 @@ ZOOM_ORDER: tuple[ChartZoom, ...] = ("24h", "3h", "1h")
 BAR_RETENTION_HOURS = 25
 MAX_BARS = BAR_RETENTION_HOURS * 60  # 1500 @ 1-min bucket
 STALE_SLIDE_MIN = 2.0  # only slide window by wall-clock once the feed lags this long
+STALE_SLIDE_CAP_MIN = (
+    30.0  # stop sliding past this gap so overnight/weekend data stays visible
+)
 
 UP_COLOR = (125, 255, 140)
 DOWN_COLOR = (255, 107, 107)
@@ -90,7 +93,8 @@ class PriceChart(PlotextPlot):
             return
         origin = self._bars[0].time
         span = (self._bars[-1].time - origin).total_seconds() / 60.0
-        if self._now_offset(origin) - span > STALE_SLIDE_MIN:
+        gap = self._now_offset(origin) - span
+        if STALE_SLIDE_MIN < gap <= STALE_SLIDE_CAP_MIN:
             self._redraw()
 
     def _candle_target(self) -> int:
@@ -311,11 +315,7 @@ class PriceChart(PlotextPlot):
         if self._view.mode == "live":
             window = ZOOM_MINUTES[self._view.zoom]
             now_offset = self._now_offset(origin)
-            if now_offset - span_minutes > STALE_SLIDE_MIN:
-                xmax = now_offset
-            else:
-                xmax = span_minutes
-            xmin = max(0.0, xmax - window)
+            xmin, xmax = _live_window(now_offset, span_minutes, window)
         else:
             xmin = 0.0
             xmax = span_minutes
@@ -550,6 +550,24 @@ class PriceChart(PlotextPlot):
         return float(step_minutes - remainder) - (
             start_local.second / 60.0 + start_local.microsecond / 60_000_000.0
         )
+
+
+def _live_window(
+    now_offset: float, span_minutes: float, window: float
+) -> tuple[float, float]:
+    """Right edge of the live view.
+
+    Slide with wall-clock while the feed lags only briefly so a momentary gap is
+    visible, but once the gap exceeds the cap (overnight / weekend) pin to the
+    last bar instead — otherwise the whole window slides past the data and the
+    chart renders blank.
+    """
+    gap = now_offset - span_minutes
+    if STALE_SLIDE_MIN < gap <= STALE_SLIDE_CAP_MIN:
+        xmax = now_offset
+    else:
+        xmax = span_minutes
+    return max(0.0, xmax - window), xmax
 
 
 def _visible_slice(xs: list[float], xmin: float, xmax: float) -> tuple[int, int]:

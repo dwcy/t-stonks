@@ -1193,7 +1193,13 @@ class GoldSilverApp(App[None]):
 
 def _filter_to_stockholm_today(bars: list[Bar]) -> list[Bar]:
     midnight = stockholm_midnight_utc()
-    return [b for b in bars if b.time.astimezone(timezone.utc) >= midnight]
+    today = [b for b in bars if b.time.astimezone(timezone.utc) >= midnight]
+    if today or not bars:
+        return today
+    # No session today (weekend / holiday / pre-market): fall back to the most
+    # recent trading day so the "today" chart still renders instead of going blank.
+    last_day = _to_stockholm(bars[-1].time).date()
+    return [b for b in bars if _to_stockholm(b.time).date() == last_day]
 
 
 def main() -> None:
