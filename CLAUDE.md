@@ -47,30 +47,61 @@ used from `app.py`).
 
 ## Repository Layout
 
+Multi-app monorepo: one `pyproject.toml`, three packages under `src/`. `marketcore`
+is the shared lower layer (symbol-agnostic); `goldsilver` and `quantum` are apps built
+on it. `marketcore` must never import an app package (guarded by
+`tests/marketcore/test_import_direction.py`).
+
 ```
-src/goldsilver/
-  __main__.py        # python -m goldsilver entry
-  app.py             # Textual App definition + main()
-  data/
-    service.py       # MetalsService — live WS + historical REST
-    models.py        # Pydantic Tick, Bar models
-  widgets/
-    price_panel.py   # Per-metal stats panel
-    chart.py         # Live-updating plotext chart widget
-  styles/
-    app.tcss         # Textual CSS (compiled at runtime via CSS_PATH)
+src/
+  marketcore/          # shared lower layer (imported by every app)
+    models.py          # Tick, Bar
+    models_macro.py    # FX/commodity/stock/news/calendar/social models
+    http.py            # make_client() httpx factory
+    session.py         # tz-parameterized now/date/midnight helpers
+    paths.py           # config_base(app_name) + per-app settings/trades/reports paths
+    fsutil.py          # atomic_write_text()
+    services/
+      base.py          # PollingService — shared start/stop/refresh loop
+      stock_service.py # StockService (yfinance), register_names()
+      news_service.py  # NewsService(feeds=...) — RSS feed list injected
+    widgets/
+      chart.py         # PriceChart (plotext)
+      stock_tile.py    # StockTile live quote + sparkline
+      format.py        # color palette + format_age()
+  goldsilver/          # gold & silver app (re-points to marketcore via facades)
+    app.py             # GoldSilverApp + main()
+    data/
+      service.py       # MetalsService — goldprice.org + Avanza hybrid (metal-specific)
+      news_feeds.py    # goldsilver's RSS feed list, injected into NewsService
+      settings.py      # AppSettings; paths via marketcore.paths("goldsilver")
+    widgets/metal_panel.py
+    styles/app.tcss
+  quantum/             # quantum ETFs + pure-play stocks + news app
+    app.py             # QuantumApp + main()
+    data/presets.py    # ETF + pure-play tickers, accent colours, name overrides
+    data/news_feeds.py # QUANTUM_NEWS_FEEDS
+    data/settings.py   # QuantumSettings; paths via marketcore.paths("quantum")
+    widgets/news_panel.py
+    styles/app.tcss
 pyproject.toml
 uv.lock
 ```
+
+Older `goldsilver` modules (fx/commodity/futures/calendar/congress/insider/yields
+services, strategy/trade/report engines) still live under `goldsilver/` and import the
+shared leaves from `marketcore`; they can be migrated into `marketcore` incrementally.
 
 ## Run
 
 ```bash
 uv sync                  # install deps
-uv run goldsilver        # launch the TUI
+uv run goldsilver        # launch the gold & silver TUI
+uv run quantum           # launch the quantum ETFs/stocks/news TUI
 ```
 
-Quit with `q`. See in-app footer for other keybindings.
+Each app stores settings under its own OS config dir (`%APPDATA%/<app>` /
+`$XDG_CONFIG_HOME/<app>`). Quit with `q`. See in-app footer for other keybindings.
 
 ## Conventions
 
@@ -93,5 +124,5 @@ Quit with `q`. See in-app footer for other keybindings.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/003-hourly-stock-analyzer/plan.md`.
+at `specs/004-shared-core-quantum-app/plan.md`.
 <!-- SPECKIT END -->

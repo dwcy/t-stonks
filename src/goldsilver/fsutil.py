@@ -1,12 +1,7 @@
-"""Filesystem helpers: crash-safe text writes via tmp file + atomic rename."""
+"""Facade: re-exports atomic filesystem helpers from marketcore."""
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
+from marketcore.fsutil import atomic_write_text
 
-
-def atomic_write_text(path: Path, text: str) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+__all__ = ["atomic_write_text"]

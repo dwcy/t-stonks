@@ -1,0 +1,88 @@
+"""Goldsilver's RSS news feed set, injected into the shared NewsService."""
+
+from __future__ import annotations
+
+from marketcore.services.news_service import FeedEntry
+
+NEWS_FEEDS: tuple[FeedEntry, ...] = (
+    (
+        "REUTERS",
+        "https://news.google.com/rss/search?q=when:24h+site:reuters.com&hl=en-US&gl=US&ceid=US:en",
+    ),
+    (
+        "BLOOMBERG",
+        "https://news.google.com/rss/search?q=when:24h+site:bloomberg.com&hl=en-US&gl=US&ceid=US:en",
+    ),
+    (
+        "POLITICO",
+        "https://news.google.com/rss/search?q=when:24h+site:politico.com&hl=en-US&gl=US&ceid=US:en",
+    ),
+    (
+        "CNBC",
+        "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+    ),
+    (
+        "WllStrtJrnl",
+        "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",
+    ),
+    (
+        "YAHOO",
+        "https://finance.yahoo.com/news/rssindex",
+    ),
+    (
+        "FOX",
+        "https://moxie.foxbusiness.com/google-publisher/markets.xml",
+    ),
+    (
+        "DgnsIndstr",
+        "https://www.di.se/rss",
+    ),
+    (
+        "SVT",
+        "https://www.svt.se/nyheter/ekonomi/rss.xml",
+    ),
+    (
+        "BREAKIT",
+        "https://www.breakit.se/feed/artiklar",
+    ),
+    (
+        "Placera",
+        "https://news.google.com/rss/search?q=when:24h+site:placera.se&hl=sv-SE&gl=SE&ceid=SE:sv",
+    ),
+    (
+        "AffrsVrldn",
+        "https://news.google.com/rss/search?q=when:24h+site:affarsvarlden.se&hl=sv-SE&gl=SE&ceid=SE:sv",
+    ),
+    (
+        "REDEYE",
+        "https://news.google.com/rss/search?q=when:7d+site:redeye.se&hl=sv-SE&gl=SE&ceid=SE:sv",
+    ),
+    (
+        "BrsKlln",
+        "https://news.google.com/rss/search?q=when:24h+site:borskollen.se&hl=sv-SE&gl=SE&ceid=SE:sv",
+    ),
+    (
+        "EFN",
+        "https://www.efn.se/rss",
+    ),
+    (
+        "TT",
+        "https://news.google.com/rss/search?q=when:24h+site:tt.se&hl=sv-SE&gl=SE&ceid=SE:sv",
+    ),
+    (
+        "WHITEHOUSE",
+        "https://www.whitehouse.gov/news/feed/",
+    ),
+    (
+        "PressTV",
+        "https://www.presstv.ir/rss.xml",
+    ),
+    (
+        "IRNA",
+        "https://en.irna.ir/rss",
+    ),
+    (
+        "MEHR",
+        "https://en.mehrnews.com/rss",
+    ),
+)

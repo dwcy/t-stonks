@@ -1,24 +1,22 @@
+"""Europe/Stockholm session helpers — thin wrappers over marketcore.session."""
+
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from marketcore import session as _session
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 
 
 def stockholm_now() -> datetime:
-    return datetime.now(STOCKHOLM)
+    return _session.now(STOCKHOLM)
 
 
 def stockholm_date_of(ts_utc: datetime) -> date:
-    return ts_utc.astimezone(STOCKHOLM).date()
+    return _session.date_of(ts_utc, STOCKHOLM)
 
 
 def stockholm_midnight_utc(for_date: date | None = None) -> datetime:
-    if for_date is None:
-        for_date = stockholm_now().date()
-    midnight_local = datetime(
-        for_date.year, for_date.month, for_date.day, tzinfo=STOCKHOLM
-    )
-    return midnight_local.astimezone(timezone.utc)
+    return _session.midnight_utc(STOCKHOLM, for_date)
