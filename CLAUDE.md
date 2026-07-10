@@ -124,5 +124,5 @@ Each app stores settings under its own OS config dir (`%APPDATA%/<app>` /
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/004-shared-core-quantum-app/plan.md`.
+at `specs/005-dashboard-ux-fixes/plan.md`.
 <!-- SPECKIT END -->
