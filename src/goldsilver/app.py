@@ -79,6 +79,7 @@ from goldsilver.widgets import (
     FxTile,
     InsiderPanel,
     MetalPanel,
+    NewsLogScreen,
     NewsPanel,
     OmxStrip,
     PlotSettings,
@@ -130,6 +131,7 @@ class GoldSilverApp(App[None]):
         Binding("t", "trade_simulator", "Trade Sim"),
         Binding("g", "reports", "Reports"),
         Binding("a", "alerts", "Alerts"),
+        Binding("l", "news_log", "News log"),
         Binding("r", "refresh", "Refresh"),
         Binding("z", "cycle_zoom", "Zoom"),
         Binding("h", "cycle_chart_mode", "Mode"),
@@ -723,6 +725,9 @@ class GoldSilverApp(App[None]):
 
     def action_alerts(self) -> None:
         self.push_screen(AlertsScreen(self._settings, on_change=self._persist_settings))
+
+    def action_news_log(self) -> None:
+        self.push_screen(NewsLogScreen(self._news_service.history()))
 
     def _update_ratio_tile(self) -> None:
         if self._ratio_tile is None:

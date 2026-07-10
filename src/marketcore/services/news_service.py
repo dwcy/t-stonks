@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -14,7 +15,7 @@ import httpx
 from pydantic import ValidationError
 
 from marketcore.http import make_client
-from marketcore.models_macro import NewsItem, NewsSource
+from marketcore.models_macro import NewsItem, NewsSource, NewsTimeConfidence
 from marketcore.services.base import PollingService
 
 NewsHandler = Callable[[list[NewsItem]], Awaitable[None] | None]
@@ -24,6 +25,7 @@ FeedEntry = tuple[NewsSource, str]
 NEWS_REFRESH_INTERVAL_S = 30.0
 TRUMP_REFRESH_INTERVAL_S = 120.0
 TRUMP_FEED_URL = "https://trumpstruth.org/feed"
+NEWS_HISTORY_MAX = 300
 _USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
@@ -73,6 +75,30 @@ def _is_placeholder(title: str) -> bool:
 class _FeedService(PollingService[list[NewsItem]]):
     """Feed poller that holds one httpx client open across the polling loop."""
 
+    def __init__(
+        self,
+        handler: NewsHandler | None,
+        stale_handler: NewsStaleHandler | None,
+        refresh_interval_s: float,
+        task_name: str,
+        *,
+        history_max: int = NEWS_HISTORY_MAX,
+    ) -> None:
+        super().__init__(handler, stale_handler, refresh_interval_s, task_name)
+        self._history: deque[NewsItem] = deque(maxlen=history_max)
+
+    def history(self) -> tuple[NewsItem, ...]:
+        """Items retained beyond the live panel's max_items/per-source cap."""
+        return tuple(self._history)
+
+    def _record_history(self, items: Sequence[NewsItem]) -> None:
+        seen_urls = {i.url for i in self._history}
+        for item in items:
+            if item.url in seen_urls:
+                continue
+            seen_urls.add(item.url)
+            self._history.append(item)
+
     async def refresh_now(self) -> None:
         async with make_client(
             headers=_HEADERS, timeout=10.0, follow_redirects=True
@@ -108,8 +134,15 @@ class NewsService(_FeedService):
         refresh_interval_s: float = NEWS_REFRESH_INTERVAL_S,
         max_items: int = 200,
         per_source_cap: int = 5,
+        history_max: int = NEWS_HISTORY_MAX,
     ) -> None:
-        super().__init__(handler, stale_handler, refresh_interval_s, "news-loop")
+        super().__init__(
+            handler,
+            stale_handler,
+            refresh_interval_s,
+            "news-loop",
+            history_max=history_max,
+        )
         self._feeds = tuple(feeds)
         self._max_items = max_items
         self._per_source_cap = per_source_cap
@@ -130,6 +163,7 @@ class NewsService(_FeedService):
             await self._emit_stale()
             return
         merged.sort(key=lambda i: i.published, reverse=True)
+        self._record_history(merged)
         await self._emit(merged[: self._max_items])
 
     async def _fetch_feed(
@@ -152,8 +186,15 @@ class TrumpService(_FeedService):
         *,
         refresh_interval_s: float = TRUMP_REFRESH_INTERVAL_S,
         max_items: int = 20,
+        history_max: int = NEWS_HISTORY_MAX,
     ) -> None:
-        super().__init__(handler, stale_handler, refresh_interval_s, "trump-loop")
+        super().__init__(
+            handler,
+            stale_handler,
+            refresh_interval_s,
+            "trump-loop",
+            history_max=history_max,
+        )
         self._max_items = max_items
 
     async def _refresh_feed(self, client: httpx.AsyncClient) -> None:
@@ -165,6 +206,7 @@ class TrumpService(_FeedService):
             await self._emit_stale()
             return
         items = _parse_rss(root, "TRUMP", title_from_description=True)
+        self._record_history(items)
         await self._emit(items[: self._max_items])
 
 
@@ -222,7 +264,11 @@ def _parse_rss(
         if _is_placeholder(title):
             continue
         published = _parse_pub_date(pub_text) if pub_text else None
+        confidence: NewsTimeConfidence = "confirmed"
         if published is None:
+            # No real <pubDate> — everything from here on is a guessed timestamp,
+            # never as trustworthy as a value the feed actually published.
+            confidence = "approximate"
             published = _date_from_url(link)
             if published is not None and published.date() == feed_time.date():
                 published = feed_time - timedelta(minutes=stagger)
@@ -238,6 +284,7 @@ def _parse_rss(
                     title=title[:200],
                     url=link,
                     published=published,
+                    time_confidence=confidence,
                 )
             )
         except ValidationError:

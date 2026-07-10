@@ -12,7 +12,7 @@ from goldsilver.data.models_macro import NewsItem
 from goldsilver.widgets.format import format_age
 
 
-_SOURCE_STYLE = {
+SOURCE_STYLE = {
     "REUTERS": "#ff6b6b",
     "BLOOMBERG": "#ff9b6b",
     "POLITICO": "#ffaa5a",
@@ -35,6 +35,21 @@ _SOURCE_STYLE = {
     "IRNA": "#66bb6a",
     "MEHR": "#81c784",
 }
+
+
+def render_news_row(text: Text, item: NewsItem, now: datetime) -> None:
+    """Append one item's row (time · age · source · title) to a news `Text` block."""
+    local = item.published.astimezone()
+    delta = now - item.published
+    age = format_age(int(delta.total_seconds()))
+    time_str = local.strftime("%H:%M")
+    if item.time_confidence == "approximate":
+        time_str = f"~{time_str}"
+    source_style = SOURCE_STYLE.get(item.source, "#7a7a8a")
+    text.append(f"{time_str} ", style="#7a7a8a")
+    text.append(f"{age:>7} ", style="dim #5a5a6a")
+    text.append(f"{item.source:<11} ", style=source_style)
+    text.append(f"{item.title}\n", style="#e0e0e8")
 
 
 class NewsPanel(VerticalScroll):
@@ -99,21 +114,10 @@ class NewsPanel(VerticalScroll):
         text = Text()
         now = datetime.now(timezone.utc)
         for item in self.items:
-            self._render_item(text, item, now)
+            render_news_row(text, item, now)
         body.update(text)
         latest = max(i.published for i in self.items)
         marker = f"latest {latest.astimezone().strftime('%H:%M')}"
         if self.stale_since is not None:
             marker = f"stale since {self.stale_since.astimezone().strftime('%H:%M')}"
         self.border_subtitle = marker
-
-    def _render_item(self, text: Text, item: NewsItem, now: datetime) -> None:
-        local = item.published.astimezone()
-        delta = now - item.published
-        age = format_age(int(delta.total_seconds()))
-        time_str = local.strftime("%H:%M")
-        source_style = _SOURCE_STYLE.get(item.source, "#7a7a8a")
-        text.append(f"{time_str} ", style="#7a7a8a")
-        text.append(f"{age:>7} ", style="dim #5a5a6a")
-        text.append(f"{item.source:<11} ", style=source_style)
-        text.append(f"{item.title}\n", style="#e0e0e8")

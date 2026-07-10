@@ -165,6 +165,11 @@ class Signal(BaseModel):
 # quantum, …) supply their own, so this stays an open string rather than a Literal.
 NewsSource = str
 
+# "confirmed" only when a real <pubDate>/ISO date parsed successfully; every fallback
+# path (URL-date stagger, feed build time, fetch time) is "approximate" — the UI must
+# not present a guessed timestamp with the same confidence as a real one.
+NewsTimeConfidence = Literal["confirmed", "approximate"]
+
 
 class NewsItem(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -173,6 +178,7 @@ class NewsItem(BaseModel):
     title: str
     url: str
     published: datetime
+    time_confidence: NewsTimeConfidence = "confirmed"
 
     @field_validator("published")
     @classmethod
