@@ -96,6 +96,11 @@ MetalPanel > .change-row {
     height: 1;
 }
 
+MetalPanel > .indicator-detail {
+    height: auto;
+    margin-top: 1;
+}
+
 #macro-strip {
     layout: horizontal;
     height: 1;

@@ -115,19 +115,26 @@ fixed priority order with stated rationale.
 **Independent Test**: Click each of the six badges; confirm description + rationale
 appears in Z-Score → MACD → BB → RSI → ROC → Slope order.
 
-- [ ] T012 [US3] Add `IndicatorInfo` dataclass + `INDICATOR_INFO: dict[str, IndicatorInfo]`
-      table (description, `priority_rank`, rationale per data-model.md) next to
-      `STRATEGY_REGISTRY` in `src/goldsilver/data/signal_strategies.py`; absorb the
-      existing `_STRATEGY_SHORT_LABELS` mapping into it
-- [ ] T013 [US3] Attach `meta={"indicator": key}` to each badge span and reorder
+- [X] T012 [US3] Add `IndicatorInfo` dataclass + `INDICATOR_INFO: dict[str, IndicatorInfo]`
+      table (description, `priority_rank`, rationale per data-model.md); absorb the
+      existing `_STRATEGY_SHORT_LABELS` mapping into it. Implemented in a new sibling
+      module `src/goldsilver/data/signal_strategy_info.py` rather than inside
+      `signal_strategies.py` — that file already carries a >400 LoC justification
+      comment, and this descriptive content is a separable concern from the strategy
+      computation classes.
+- [X] T013 [US3] Attach `meta={"indicator": key}` to each badge span and reorder
       `_render_indicators()` to iterate by `priority_rank` in
       `src/goldsilver/widgets/metal_panel.py` (depends on T012)
-- [ ] T014 [US3] Add `_expanded_indicator: reactive[str | None]` + `on_click` toggle
+- [X] T014 [US3] Add `expanded_indicator: reactive[str | None]` + `on_click` toggle
       (expand/collapse, no effect on live values) + description rendering beneath the
-      badge row in `src/goldsilver/widgets/metal_panel.py` (depends on T013)
-- [ ] T015 [P] [US3] Add a test asserting priority order and toggle behavior in
-      `tests/test_metal_panel.py` (new, or extend an existing metal-panel test file
-      if one exists)
+      badge row in `src/goldsilver/widgets/metal_panel.py` (depends on T013). Named
+      without a leading underscore (unlike the plan's `_expanded_indicator`) to match
+      every other reactive field's naming convention in this file and sidestep any
+      ambiguity in Textual's `watch_<name>` resolution for underscore-prefixed
+      reactives.
+- [X] T015 [P] [US3] Add a test asserting priority order and toggle behavior in
+      `tests/test_metal_panel_indicators.py` (new), plus
+      `tests/test_signal_strategy_info.py` for INDICATOR_INFO data integrity.
 
 **Checkpoint**: Indicator transparency ships independently.
 
