@@ -203,18 +203,30 @@ existing analysis pipeline.
 screen; confirm both appear pinned alongside Gold/Silver and produce a report in the
 same style/location.
 
-- [ ] T024 [US6] Add `PINNED_COMMODITIES = ("BRENT", "COPPER")` and extend the label
+- [X] T024 [US6] Add `PINNED_COMMODITIES = ("BRENT", "COPPER")` and extend the label
       table with `"BRENT": "Oil", "COPPER": "Copper"` in
-      `src/goldsilver/reports/constants.py`
-- [ ] T025 [US6] Merge `PINNED_COMMODITIES` into
+      `src/goldsilver/reports/constants.py`. Also extended `TickerKind` to
+      `Literal["metal", "commodity", "stock"]` and added `ReportTicker.commodity()`/
+      `pinned_commodity_tickers()` in `reports/models.py`, and wired
+      `pinned_commodity_tickers()` into `ReportService.full_watchlist()` — the plan
+      didn't call these out explicitly but they're required for `run_all()` to
+      actually generate the two new pinned tickers.
+- [X] T025 [US6] Merge `PINNED_COMMODITIES` into
       `ReportWatchlistScreen._watchlist_entries()` in
       `src/goldsilver/widgets/report_watchlist.py` (depends on T024)
-- [ ] T026 [US6] Reuse `commodity_service.py`'s live BRENT/COPPER quotes as the
+- [X] T026 [US6] Reuse `commodity_service.py`'s live BRENT/COPPER quotes as the
       reference-quote source (instead of adding new yfinance proxies) in
-      `src/goldsilver/reports/reference_quote.py` (depends on T024)
-- [ ] T027 [P] [US6] Extend `tests/test_report_watchlist.py` and
-      `tests/test_commodity_copper.py` to cover the two new pinned tickers and their
-      reference-quote path
+      `src/goldsilver/reports/reference_quote.py` (depends on T024). Extracted
+      `fetch_commodity_quote()` as a standalone function out of
+      `CommodityService._fetch`/`_fetch_copper_avanza` so both the live poller and
+      the one-shot report reference-quote lookup share the same fetch code.
+      `verdict_tracker.py`'s post-hoc backtest still uses a yfinance HG=F/BZ=F proxy
+      (unaffected by this — that's a different, direction-only accuracy check, not
+      the live reference quote).
+- [X] T027 [P] [US6] Extend `tests/test_report_watchlist.py`,
+      `tests/test_commodity_copper.py`, and `tests/test_report_service_watchlist.py`
+      to cover the two new pinned tickers; added `tests/test_reference_quote.py` for
+      the new commodity fetch/format path.
 
 **Checkpoint**: Copper/oil reports ship independently.
 

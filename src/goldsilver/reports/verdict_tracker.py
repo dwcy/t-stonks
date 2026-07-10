@@ -24,11 +24,12 @@ class TickerAccuracy:
 
 
 def yf_symbol_for_run(run: ReportRun) -> str:
-    ticker = (
-        ReportTicker.metal(run.ticker)
-        if run.kind == "metal"
-        else ReportTicker.stock(run.ticker)
-    )
+    if run.kind == "metal":
+        ticker = ReportTicker.metal(run.ticker)
+    elif run.kind == "commodity":
+        ticker = ReportTicker.commodity(run.ticker)
+    else:
+        ticker = ReportTicker.stock(run.ticker)
     return quote_symbol(ticker)
 
 
