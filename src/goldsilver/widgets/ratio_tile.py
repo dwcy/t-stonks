@@ -31,7 +31,7 @@ class RatioTile(Static):
 
     def _redraw(self) -> None:
         if self.ratio is None:
-            self.update(Text("Au/Ag loading…", style=FLAT_COLOR))
+            self.update(Text("Gold/Silver Ratio loading…", style=FLAT_COLOR))
             return
         ratio = self.ratio
         if self.prev_ratio:
@@ -44,12 +44,12 @@ class RatioTile(Static):
         sign = "+" if pct > 0 else ""
         line = Text.assemble(
             (f"{arrow} ", color),
-            ("Au/Ag ", MUTED_COLOR),
+            ("Gold/Silver Ratio ", MUTED_COLOR),
             (f"{ratio:.1f} ", "bold #e0e0e8"),
             (f"{sign}{pct:.2f}%", color),
         )
         if ratio >= RATIO_HIGH_EXTREME:
-            line.append("  · Ag cheap", style=f"bold {UP_COLOR}")
+            line.append("  · Silver cheap", style=f"bold {UP_COLOR}")
         elif ratio <= RATIO_LOW_EXTREME:
-            line.append("  · Au cheap", style=f"bold {UP_COLOR}")
+            line.append("  · Gold cheap", style=f"bold {UP_COLOR}")
         self.update(line)

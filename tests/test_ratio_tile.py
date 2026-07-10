@@ -27,7 +27,7 @@ async def test_renders_ratio_with_change() -> None:
         tile.apply_ratio(84.32, 84.0)
         await pilot.pause()
         text = str(tile.render())
-        assert "Au/Ag" in text
+        assert "Gold/Silver Ratio" in text
         assert "84.3" in text
         assert "+0.38%" in text
 
@@ -38,7 +38,7 @@ async def test_extreme_zone_hint() -> None:
         tile = app.query_one(RatioTile)
         tile.apply_ratio(92.5, 92.0)
         await pilot.pause()
-        assert "Ag cheap" in str(tile.render())
+        assert "Silver cheap" in str(tile.render())
         tile.apply_ratio(68.0, 69.0)
         await pilot.pause()
-        assert "Au cheap" in str(tile.render())
+        assert "Gold cheap" in str(tile.render())

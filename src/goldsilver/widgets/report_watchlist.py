@@ -265,7 +265,8 @@ class ReportWatchlistScreen(ModalScreen[None]):
             tag = "—"
         else:
             tag = run.status.value
-        return f"{when}  {run.ticker:<8}  {tag}"
+        name = METAL_LABELS.get(run.ticker, run.ticker)
+        return f"{when}  {name:<8}  {tag}"
 
     def _refresh_tickers(self) -> None:
         container = self.query_one("#report-ticker-list", Vertical)

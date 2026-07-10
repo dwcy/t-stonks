@@ -174,14 +174,16 @@ everywhere they're user-facing.
 **Independent Test**: Ratio and DXY tiles show readable names; report screen's ticker
 rows and recent-reports list both read "Gold"/"Silver".
 
-- [ ] T020 [P] [US5] Change the DXY label to `"US Dollar Index"` in
-      `src/goldsilver/widgets/commodity_tile.py`
-- [ ] T021 [P] [US5] Change `"Au/Ag "` to `"Gold/Silver Ratio "` in
-      `src/goldsilver/widgets/ratio_tile.py`
-- [ ] T022 [P] [US5] Fix `_recent_label` in `src/goldsilver/widgets/report_watchlist.py`
-      to use `METAL_LABELS.get(run.ticker, run.label)` instead of the raw
-      `run.ticker`
-- [ ] T023 [P] [US5] Update `tests/test_ratio_tile.py` and `tests/test_report_watchlist.py`
+- [X] T020 [P] [US5] Change the DXY label to `"Dollar Index"` in
+      `src/goldsilver/widgets/commodity_tile.py` and `src/goldsilver/widgets/plot_settings.py`
+      (mini-tile settings picker also showed "DXY (USD index)")
+- [X] T021 [P] [US5] Change `"Au/Ag "` to `"Gold/Silver Ratio "` in
+      `src/goldsilver/widgets/ratio_tile.py`, plus the "Au cheap"/"Ag cheap" extreme-zone
+      hints to "Gold cheap"/"Silver cheap" (SC-007 requires zero "Au" instances) and the
+      settings picker's "Au/Ag ratio" label in `plot_settings.py`
+- [X] T022 [P] [US5] Fix `_recent_label` in `src/goldsilver/widgets/report_watchlist.py`
+      to use `METAL_LABELS.get(run.ticker, run.ticker)` instead of the raw `run.ticker`
+- [X] T023 [P] [US5] Update `tests/test_ratio_tile.py` and `tests/test_report_watchlist.py`
       assertions for the new label strings
 
 **Checkpoint**: Readable naming ships independently — pure text/label changes, no
