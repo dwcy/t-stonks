@@ -79,6 +79,12 @@ def test_app_settings_accepts_rate_mini_tiles() -> None:
     assert settings.mini_tiles == ["FEDRATE", "RIKSRATE"]
 
 
+def test_app_settings_accepts_index_mini_tiles() -> None:
+    settings = AppSettings(mini_tiles=["DAX", "CAC40", "FTSE100", "NIKKEI225"])
+
+    assert settings.mini_tiles == ["DAX", "CAC40", "FTSE100", "NIKKEI225"]
+
+
 def test_parse_tickers_splits_and_dedupes() -> None:
     assert parse_tickers("abb.st, BOL.ST; abb.st bol.st") == ["ABB.ST", "BOL.ST"]
 

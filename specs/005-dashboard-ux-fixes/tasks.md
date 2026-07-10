@@ -289,25 +289,39 @@ change + open/closed state.
 **Independent Test**: Add the four index keys to mini-tiles; confirm each shows a
 level, change, and a "closed" indicator outside trading hours.
 
-- [ ] T037 [P] [US8] Add `IndexPoint` model to `src/marketcore/models_macro.py`
-      (`symbol`, `level`, `previous_close`, `session_open`, `time`)
-- [ ] T038 [US8] Create `src/goldsilver/data/index_service.py` — a parameterized
-      index poller (`display_name`, `yf_symbol`, session `tz`) covering DAX
-      (`^GDAXI`), CAC 40 (`^FCHI`), FTSE 100 (`^FTSE`), Nikkei 225 (`^N225`); session
-      open/closed via `marketcore/session.py`'s existing tz helpers (depends on T037)
-- [ ] T039 [US8] Create `src/goldsilver/widgets/index_tile.py` (`IndexTile`, reactive
+- [X] T037 [P] [US8] Add `IndexPoint`/`IndexSymbol` model to
+      `src/marketcore/models_macro.py` (`symbol`, `level`, `previous_close`,
+      `session_open`, `time`), re-exported via the goldsilver facade
+- [X] T038 [US8] Create `src/goldsilver/data/index_service.py` — a parameterized
+      index poller (`IndexDefinition(yf_symbol, tz, open_time, close_time)`) covering
+      DAX (`^GDAXI`), CAC 40 (`^FCHI`), FTSE 100 (`^FTSE`), Nikkei 225 (`^N225`);
+      session open/closed via a local weekday+time-window check per exchange tz
+      (depends on T037). Also extracted `src/goldsilver/data/yf_daily.py`
+      (`fetch_daily_close_pair`) shared between this and `commodity_service.py`'s
+      yfinance path, since both needed the identical "last two daily closes" fetch —
+      not called out in the plan but a direct DRY consequence of writing this file.
+- [X] T039 [US8] Create `src/goldsilver/widgets/index_tile.py` (`IndexTile`, reactive
       `IndexPoint`, renders a "closed" marker when `session_open is False`) (depends
       on T037)
-- [ ] T040 [US8] Add `DAX`/`CAC40`/`FTSE100`/`NIKKEI225` to `ALLOWED_MINI_TILES` in
-      `src/goldsilver/data/settings.py`, wire the `_INDEX_IDS` dispatch branch +
-      service lifecycle in `src/goldsilver/app.py`, per
+- [X] T040 [US8] Add `DAX`/`CAC40`/`FTSE100`/`NIKKEI225` to `ALLOWED_MINI_TILES` in
+      `src/goldsilver/data/settings.py` and the mini-tile settings picker label map;
+      wire the `_INDEX_IDS` dispatch branch + per-exchange service
+      start/stop/refresh_now lifecycle in `src/goldsilver/app.py`, per
       `contracts/mini-tile-registry.md` (depends on T038, T039)
-- [ ] T041 [US8] Migrate `src/goldsilver/data/omx_service.py`'s `^OMX` poller onto
-      `index_service.py`'s generalized class (depends on T038); update
-      `tests/test_omx_strip.py` accordingly
-- [ ] T042 [P] [US8] Add `tests/test_index_service.py` covering session open/closed
-      detection per exchange timezone; extend `tests/test_minicharts_settings.py` for
-      the four new keys
+- [X] T041 [US8] **Deviation from plan, deliberate**: did NOT migrate
+      `omx_service.py`'s `^OMX` poller onto `index_service.py`. On inspection, OMX's
+      fetch already computes a 25-day history + YTD change feeding `OmxStrip`'s
+      dedicated weekly-calendar widget (4 weeks of daily up/down symbols) — a
+      materially richer data need than the new tiles' single current-level +
+      previous-close. `IndexPoint`/`IndexService` were scoped to match the new
+      tiles' actual (simpler) requirement per `CommodityTile`'s pattern; forcing OMX
+      onto that shape would have either lost its weekly-calendar data or bent
+      `IndexService` back into something as complex as `OmxService`, defeating the
+      simplification. `omx_service.py`/`omx_strip.py`/`tests/test_omx_strip.py` are
+      unchanged.
+- [X] T042 [P] [US8] Add `tests/test_index_service.py` (session open/closed per
+      exchange timezone + refresh/stale paths) and `tests/test_index_tile.py`;
+      extended `tests/test_minicharts_settings.py` for the four new keys
 
 **Checkpoint**: International index tiles ship independently.
 

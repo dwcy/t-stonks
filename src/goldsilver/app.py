@@ -42,6 +42,8 @@ from goldsilver.data.models_macro import (
     FxPair,
     FxRate,
     InsiderTrade,
+    IndexPoint,
+    IndexSymbol,
     NewsItem,
     OmxSnapshot,
     RatePoint,
@@ -67,6 +69,7 @@ from goldsilver.settings_sync import apply_settings_change
 from goldsilver.data.alerts import PriceAlertEngine
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
+from goldsilver.data.index_service import IndexService
 from goldsilver.data.rates_service import RateService
 from goldsilver.data.trades_service import TradesService
 from goldsilver.data.yields_service import RealYieldService
@@ -80,6 +83,7 @@ from goldsilver.widgets import (
     EditMathScreen,
     FuturesStrip,
     FxTile,
+    IndexTile,
     InsiderPanel,
     MetalPanel,
     NewsLogScreen,
@@ -105,6 +109,7 @@ _COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC", "DXY"})
 _RATIO_ID = "RATIO"
 _REAL_YIELD_ID = "REALYIELD"
 _RATE_SOURCE_BY_ID: dict[str, str] = {"FEDRATE": "fed", "RIKSRATE": "riksbank"}
+_INDEX_IDS: frozenset[str] = frozenset({"DAX", "CAC40", "FTSE100", "NIKKEI225"})
 
 TIMEFRAMES: list[tuple[str, str, str, str | None]] = [
     ("today", "2d", "1m", "today"),
@@ -172,6 +177,15 @@ class GoldSilverApp(App[None]):
         self._riksbank_rate_service = RateService(
             "riksbank", handler=self._on_riksbank_rate
         )
+        self._index_tiles: dict[str, IndexTile] = {}
+        self._index_services: dict[str, IndexService] = {
+            symbol: IndexService(
+                cast(IndexSymbol, symbol),
+                handler=self._on_index_point,
+                stale_handler=self._on_index_stale,
+            )
+            for symbol in _INDEX_IDS
+        }
         self._alert_engine = PriceAlertEngine()
         self._calendar_panel: CalendarPanel | None = None
         self._calendar_event_screen: CalendarEventScreen | None = None
@@ -329,6 +343,7 @@ class GoldSilverApp(App[None]):
         self._ratio_tile = None
         self._yield_tile = None
         self._rate_tiles.clear()
+        self._index_tiles.clear()
         widgets: list[Static] = []
         for i, tile_id in enumerate(self._settings.mini_tiles):
             if i > 0:
@@ -354,6 +369,11 @@ class GoldSilverApp(App[None]):
                 rate_tile = RateTile(source)
                 self._rate_tiles[tile_id] = rate_tile
                 widgets.append(rate_tile)
+            elif tile_id in _INDEX_IDS:
+                idx_symbol = cast(IndexSymbol, tile_id)
+                idx_tile = IndexTile(idx_symbol)
+                self._index_tiles[tile_id] = idx_tile
+                widgets.append(idx_tile)
         return widgets
 
     def _build_metals(self) -> None:
@@ -442,6 +462,8 @@ class GoldSilverApp(App[None]):
         self._yields_service.start()
         self._fed_rate_service.start()
         self._riksbank_rate_service.start()
+        for index_service in self._index_services.values():
+            index_service.start()
         self._seed_all()
         if self._settings.simulator.enabled:
             self._start_simulator_replay()
@@ -465,6 +487,8 @@ class GoldSilverApp(App[None]):
         await self._yields_service.stop()
         await self._fed_rate_service.stop()
         await self._riksbank_rate_service.stop()
+        for index_service in self._index_services.values():
+            await index_service.stop()
 
     def _seed_all(self) -> None:
         for symbol in self._panels:
@@ -801,6 +825,16 @@ class GoldSilverApp(App[None]):
         for tile_id in self._rate_tiles:
             self._update_rate_tile(tile_id)
 
+    async def _on_index_point(self, point: IndexPoint) -> None:
+        tile = self._index_tiles.get(point.symbol)
+        if tile is not None:
+            tile.apply_point(point)
+
+    async def _on_index_stale(self, symbol: IndexSymbol, since: datetime) -> None:
+        tile = self._index_tiles.get(symbol)
+        if tile is not None:
+            tile.mark_stale(since)
+
     async def _on_fx_rate(self, rate: FxRate) -> None:
         tile = self._fx_tiles.get(rate.pair)
         if tile is not None:
@@ -1130,6 +1164,8 @@ class GoldSilverApp(App[None]):
         await self._yields_service.refresh_now()
         await self._fed_rate_service.refresh_now()
         await self._riksbank_rate_service.refresh_now()
+        for index_service in self._index_services.values():
+            await index_service.refresh_now()
         self._seed_all()
 
     def action_cycle_zoom(self) -> None:
@@ -1183,6 +1219,8 @@ class GoldSilverApp(App[None]):
         await self._yields_service.refresh_now()
         await self._fed_rate_service.refresh_now()
         await self._riksbank_rate_service.refresh_now()
+        for index_service in self._index_services.values():
+            await index_service.refresh_now()
 
     def action_toggle_crosshair(self) -> None:
         if self._chart_mode != "live":

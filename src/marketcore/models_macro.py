@@ -236,6 +236,38 @@ class CommodityQuote(BaseModel):
         return (self.price - self.previous_close) / self.previous_close * 100.0
 
 
+IndexSymbol = Literal["DAX", "CAC40", "FTSE100", "NIKKEI225"]
+
+
+class IndexPoint(BaseModel):
+    """A national equity index's current level (DAX/CAC 40/FTSE 100/Nikkei 225)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: IndexSymbol
+    level: float
+    previous_close: float
+    session_open: bool
+    time: datetime
+
+    @field_validator("level", "previous_close")
+    @classmethod
+    def _positive(cls, v: float) -> float:
+        if v <= 0.0:
+            raise ValueError(f"index level must be positive: {v}")
+        return v
+
+    @property
+    def change(self) -> float:
+        return self.level - self.previous_close
+
+    @property
+    def change_percent(self) -> float:
+        if self.previous_close == 0.0:
+            return 0.0
+        return (self.level - self.previous_close) / self.previous_close * 100.0
+
+
 Party = Literal["R", "D", "I"]
 TradeSide = Literal["BUY", "SELL", "EXCHANGE"]
 Chamber = Literal["HOUSE", "SENATE"]

@@ -39,6 +39,10 @@ _MINI_TILE_LABEL: dict[str, str] = {
     "REALYIELD": "10Y real yield",
     "FEDRATE": "Fed funds rate",
     "RIKSRATE": "Riksbank policy rate",
+    "DAX": "DAX (Germany)",
+    "CAC40": "CAC 40 (France)",
+    "FTSE100": "FTSE 100 (UK)",
+    "NIKKEI225": "Nikkei 225 (Japan)",
 }
 
 

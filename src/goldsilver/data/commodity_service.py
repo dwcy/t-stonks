@@ -5,11 +5,11 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
 import httpx
-import yfinance as yf
 from pydantic import ValidationError
 
 from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import CommodityQuote, CommoditySymbol
+from goldsilver.data.yf_daily import fetch_daily_close_pair
 
 
 CommodityHandler = Callable[[CommodityQuote], Awaitable[None] | None]
@@ -35,31 +35,19 @@ async def fetch_commodity_quote(symbol: CommoditySymbol) -> CommodityQuote | Non
     if symbol == "COPPER":
         return await _fetch_copper_avanza()
     yf_symbol = _YF_SYMBOL[symbol]
-
-    def _sync() -> CommodityQuote | None:
-        try:
-            df = yf.Ticker(yf_symbol).history(period="5d", interval="1d")
-        except Exception:
-            return None
-        if df is None or len(df) < 2:
-            return None
-        closes = [float(c) for c in df["Close"].tolist() if c == c]
-        if len(closes) < 2:
-            return None
-        last_ts = df.index[-1].to_pydatetime()
-        if last_ts.tzinfo is None:
-            last_ts = last_ts.replace(tzinfo=timezone.utc)
-        try:
-            return CommodityQuote(
-                symbol=symbol,
-                price=closes[-1],
-                previous_close=closes[-2],
-                time=last_ts.astimezone(timezone.utc),
-            )
-        except ValidationError:
-            return None
-
-    return await asyncio.to_thread(_sync)
+    pair = await asyncio.to_thread(fetch_daily_close_pair, yf_symbol)
+    if pair is None:
+        return None
+    price, previous_close, last_ts = pair
+    try:
+        return CommodityQuote(
+            symbol=symbol,
+            price=price,
+            previous_close=previous_close,
+            time=last_ts,
+        )
+    except ValidationError:
+        return None
 
 
 async def _fetch_copper_avanza() -> CommodityQuote | None:
