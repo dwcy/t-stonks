@@ -9,6 +9,7 @@ from marketcore.services.stock_service import (
     _NAME_CACHE,
     _resolve_display_name,
     fetch_daily_history,
+    fetch_dividend_info,
     fetch_single_quote,
     register_names,
     yf,
@@ -24,5 +25,6 @@ __all__ = [
     "STOCK_REFRESH_INTERVAL_S",
     "StockService",
     "fetch_daily_history",
+    "fetch_dividend_info",
     "fetch_single_quote",
 ]

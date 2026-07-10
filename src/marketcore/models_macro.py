@@ -436,3 +436,14 @@ class StockQuote(BaseModel):
         if self.previous_close == 0.0:
             return 0.0
         return (self.price - self.previous_close) / self.previous_close * 100.0
+
+
+class DividendInfo(BaseModel):
+    """A stock's most recent dividend payment (historical only — no forward-looking source)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ticker: str
+    amount: float | None = None
+    payment_date: date | None = None
+    is_forward_looking: bool = False

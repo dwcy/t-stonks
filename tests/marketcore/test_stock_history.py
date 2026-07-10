@@ -83,6 +83,52 @@ def test_compute_daily_changes_derives_direction() -> None:
     assert changes[2].direction == "down"
 
 
+def test_fetch_dividend_info_returns_most_recent_payment(monkeypatch) -> None:
+    index = pd.to_datetime(["2025-12-01", "2026-03-01", "2026-06-01"], utc=True)
+    series = pd.Series([0.20, 0.22, 0.24], index=index)
+
+    class _FakeTicker:
+        def __init__(self, sym: str) -> None:
+            self.sym = sym
+            self.dividends = series
+
+    monkeypatch.setattr(stock_service.yf, "Ticker", _FakeTicker)
+
+    info = stock_service.fetch_dividend_info("NVDA")
+
+    assert info.ticker == "NVDA"
+    assert info.amount == 0.24
+    assert (
+        info.payment_date is not None and info.payment_date.isoformat() == "2026-06-01"
+    )
+    assert info.is_forward_looking is False
+
+
+def test_fetch_dividend_info_no_dividends(monkeypatch) -> None:
+    class _FakeTicker:
+        def __init__(self, sym: str) -> None:
+            self.dividends = pd.Series(dtype=float)
+
+    monkeypatch.setattr(stock_service.yf, "Ticker", _FakeTicker)
+
+    info = stock_service.fetch_dividend_info("XYZ")
+
+    assert info.amount is None
+    assert info.payment_date is None
+
+
+def test_fetch_dividend_info_handles_failure(monkeypatch) -> None:
+    class _FailingTicker:
+        def __init__(self, sym: str) -> None:
+            raise RuntimeError("network down")
+
+    monkeypatch.setattr(stock_service.yf, "Ticker", _FailingTicker)
+
+    info = stock_service.fetch_dividend_info("XYZ")
+
+    assert info.amount is None
+
+
 def test_compute_daily_changes_caps_at_max_days() -> None:
     base = datetime(2026, 1, 1, tzinfo=timezone.utc)
     bars = [

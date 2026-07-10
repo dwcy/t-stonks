@@ -10,7 +10,7 @@ import yfinance as yf
 from pydantic import ValidationError
 
 from marketcore.models import Bar
-from marketcore.models_macro import StockQuote
+from marketcore.models_macro import DividendInfo, StockQuote
 from marketcore.services.base import PollingService
 
 StockHandler = Callable[[list[StockQuote]], Awaitable[None] | None]
@@ -207,3 +207,27 @@ def fetch_daily_history(sym: str, *, period: str = "3mo") -> list[Bar]:
         except (ValueError, KeyError, ValidationError):
             continue
     return bars
+
+
+def fetch_dividend_info(sym: str) -> DividendInfo:
+    """Most recent dividend payment for `sym`, if any — historical only, no
+    forward-looking source (yfinance's forward calendar is unreliable across
+    tickers, so this deliberately doesn't attempt to parse it)."""
+    try:
+        series = yf.Ticker(sym).dividends
+    except Exception:
+        series = None
+    if series is None or len(series) == 0:
+        return DividendInfo(ticker=sym)
+    try:
+        last_ts = series.index[-1]
+        amount = float(series.iloc[-1])
+    except (IndexError, ValueError, TypeError):
+        return DividendInfo(ticker=sym)
+    payment_date = last_ts.date() if hasattr(last_ts, "date") else None
+    return DividendInfo(
+        ticker=sym,
+        amount=amount,
+        payment_date=payment_date,
+        is_forward_looking=False,
+    )

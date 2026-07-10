@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import webbrowser
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from goldsilver.data.session import stockholm_now
 from goldsilver.reports.claude_runner import find_claude
 from goldsilver.reports.html_writer import delete_report, load_recent_runs, write_index
 from goldsilver.reports.models import ReportRun, ReportTicker
 from goldsilver.reports.report_service import ReportService
-from goldsilver.reports.scheduler import ReportScheduler
+from goldsilver.reports.scheduler import ReportScheduler, seconds_until_next_boundary
 from goldsilver.reports.verdict_tracker import (
     evaluate_accuracy,
     fetch_daily_closes,
@@ -33,6 +34,35 @@ class ReportController:
         self._runs: list[ReportRun] = load_recent_runs(self._service.out_root())
         self._scheduler: ReportScheduler | None = None
         self._screen: ReportWatchlistScreen | None = None
+
+    def is_watchlisted(self, ticker: str) -> bool:
+        return ticker in {t.symbol for t in self._service.effective_watchlist()}
+
+    def latest_run_for(self, ticker: str) -> ReportRun | None:
+        return next((r for r in self._runs if r.ticker == ticker), None)
+
+    def next_run_at(self) -> datetime | None:
+        if not self._app._settings.report.enabled:
+            return None
+        interval = self._app._settings.report.interval_minutes
+        delay = seconds_until_next_boundary(stockholm_now(), interval)
+        return stockholm_now() + timedelta(seconds=delay)
+
+    def latest_report_summary_for(self, ticker: str) -> str | None:
+        run = self.latest_run_for(ticker)
+        if run is None:
+            return None
+        return f"{run.started_at.strftime('%H:%M')}  {run.status.value}"
+
+    def latest_report_uri_for(self, ticker: str) -> str | None:
+        run = self.latest_run_for(ticker)
+        if run is None or not run.html_path:
+            return None
+        path = self._service.out_root() / run.html_path
+        try:
+            return path.resolve().as_uri()
+        except OSError:
+            return None
 
     def open_screen(self) -> None:
         if find_claude() is None:

@@ -66,7 +66,22 @@ StockChartScreen {
     margin-top: 1;
 }
 
+#stock-chart-report {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+    color: #ffd56b;
+}
+
+#stock-chart-dividend {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+    color: #c0c0d0;
+}
+
+#stock-chart-open-report,
 #stock-chart-close {
-    width: 18;
+    width: 24;
     margin-top: 1;
 }

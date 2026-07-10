@@ -57,7 +57,7 @@ from goldsilver.data.models_macro import (
 from goldsilver.data.models_futures import FuturesSnapshot
 from goldsilver.data.settings import AppSettings
 from goldsilver.data.stock_presets import extra_row_tickers
-from goldsilver.data.stock_service import fetch_daily_history
+from goldsilver.data.stock_service import fetch_daily_history, fetch_dividend_info
 from goldsilver.data.signal_strategies import (
     SignalStrategy,
     STRATEGY_REGISTRY,
@@ -760,8 +760,27 @@ class GoldSilverApp(App[None]):
         )
 
     async def _load_stock_chart(self, ticker: str) -> None:
-        bars = await asyncio.to_thread(fetch_daily_history, ticker)
-        self.push_screen(StockChartScreen(ticker, bars))
+        bars, dividend = await asyncio.gather(
+            asyncio.to_thread(fetch_daily_history, ticker),
+            asyncio.to_thread(fetch_dividend_info, ticker),
+        )
+        next_report_at = None
+        latest_report_summary = None
+        latest_report_path = None
+        if self._reports.is_watchlisted(ticker):
+            next_report_at = self._reports.next_run_at()
+            latest_report_summary = self._reports.latest_report_summary_for(ticker)
+            latest_report_path = self._reports.latest_report_uri_for(ticker)
+        self.push_screen(
+            StockChartScreen(
+                ticker,
+                bars,
+                next_report_at=next_report_at,
+                latest_report_summary=latest_report_summary,
+                latest_report_path=latest_report_path,
+                dividend=dividend,
+            )
+        )
 
     def _fetch_event_actuals(self, event: CalendarEvent) -> None:
         self.run_worker(

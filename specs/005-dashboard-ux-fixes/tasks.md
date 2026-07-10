@@ -395,27 +395,49 @@ confirm next-run time, latest-report link, and dividend info (or a clear "no
 dividend" state) all appear; confirm a non-watchlisted stock's modal has no report
 section.
 
-- [ ] T051 [P] [US10] Add `DividendInfo` model to `src/marketcore/models_macro.py`
-      (`ticker`, `amount`, `payment_date`, `is_forward_looking`)
-- [ ] T052 [US10] Add `fetch_dividend_info(ticker)` to
+- [X] T051 [P] [US10] Add `DividendInfo` model to `src/marketcore/models_macro.py`
+      (`ticker`, `amount`, `payment_date`, `is_forward_looking`); re-exported via the
+      goldsilver facade
+- [X] T052 [US10] Add `fetch_dividend_info(ticker)` to
       `src/marketcore/services/stock_service.py` using `yf.Ticker(ticker).dividends`,
       falling back to the most recent historical payment with
-      `is_forward_looking=False` when no forward data exists (depends on T051)
-- [ ] T053 [US10] Add a by-ticker lookup helper over `self._runs` to
-      `src/goldsilver/report_controller.py` (`latest_run_for(ticker) -> ReportRun | None`)
-- [ ] T054 [US10] Extend `StockChartScreen` (`src/goldsilver/widgets/stock_chart_screen.py`)
-      with the report section (next-run time via `seconds_until_next_boundary()` from
-      `reports/scheduler.py`, latest-report link via T053; omitted entirely when the
-      ticker isn't on the report watchlist per FR-042) and the dividend section
-      (always rendered; "No dividend information available" when `dividend.amount is
-      None`; "Last payment" vs. "Next payment" label per `is_forward_looking`)
-      (depends on T052, T053)
-- [ ] T055 [US10] Update `_show_stock_chart(ticker)` in `src/goldsilver/app.py` to
-      pass `recent_report`, `next_report_at`, and `dividend` into `StockChartScreen`
-      per `contracts/chart-detail-modal.md` (depends on T053, T054)
-- [ ] T056 [P] [US10] Add `tests/test_dividend_info.py` for `fetch_dividend_info()`
-      parsing/fallback; extend `tests/test_stock_chart_screen.py` with report-section
-      presence/absence and dividend-state assertions
+      `is_forward_looking=False` (no forward-looking source attempted at all —
+      yfinance's forward calendar is unreliable enough across tickers that parsing
+      it wasn't worth the fragility) (depends on T051)
+- [X] T053 [US10] Added `is_watchlisted(ticker)`, `latest_run_for(ticker)`,
+      `next_run_at()`, `latest_report_summary_for(ticker)`, and
+      `latest_report_uri_for(ticker)` to `src/goldsilver/report_controller.py`.
+      `is_watchlisted` checks `effective_watchlist()` (respects the exclude toggle)
+      since that's what actually determines whether a ticker runs at the next
+      scheduled boundary — an excluded ticker showing a "next report" time would be
+      misleading.
+- [X] T054 [US10] Extended `StockChartScreen`
+      (`src/marketcore/widgets/stock_chart_screen.py` — **not**
+      `goldsilver/widgets/`, same cross-app reason as T047) with the report section
+      and dividend section. **Deviation from plan, deliberate**: the constructor
+      takes caller-formatted `next_report_at: datetime`, `latest_report_summary: str`,
+      `latest_report_path: str` instead of a raw `ReportRun` object — `ReportRun`
+      lives in `goldsilver.reports.models`, and marketcore must never import an app
+      package (`tests/marketcore/test_import_direction.py` enforces this). The
+      report section renders only when at least one of `next_report_at`/
+      `latest_report_summary` is provided (FR-042); an "Open latest report" button
+      appears only when `latest_report_path` is set. Dividend section always
+      renders; "No dividend information available" when `amount`/`payment_date` is
+      `None`; "Last payment" vs. "Next payment" label per `is_forward_looking`.
+- [X] T055 [US10] Updated `_load_stock_chart(ticker)` in `src/goldsilver/app.py` to
+      fetch dividend info alongside daily history (`asyncio.gather`), check
+      `self._reports.is_watchlisted(ticker)`, and pass the three report fields +
+      dividend into `StockChartScreen`. Also updated `quantum/app.py`'s
+      `_load_stock_chart` to pass dividend info (quantum has no report engine, so
+      its report fields are always omitted — correct per FR-042, quantum stocks
+      simply aren't watchlistable).
+- [X] T056 [P] [US10] Added `tests/marketcore/test_stock_history.py` cases for
+      `fetch_dividend_info()` (success/empty/failure), `tests/test_report_controller.py`
+      (new, covers all 5 new `ReportController` methods against a lightweight stub
+      app), and extended `tests/marketcore/test_stock_chart_screen.py` with
+      report-section presence/absence, open-report button, and both dividend
+      states. Live-verified against real MSFT dividend data ($0.91, 2026-05-21) and
+      a real watchlisted-ticker "next report" time during implementation.
 
 **Checkpoint**: All ten stories now independently functional.
 

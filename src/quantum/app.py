@@ -16,6 +16,7 @@ from marketcore.services.news_service import NewsService
 from marketcore.services.stock_service import (
     StockService,
     fetch_daily_history,
+    fetch_dividend_info,
     register_names,
 )
 from marketcore.widgets.stock_chart_screen import StockChartScreen
@@ -136,8 +137,11 @@ class QuantumApp(App[None]):
         )
 
     async def _load_stock_chart(self, ticker: str) -> None:
-        bars = await asyncio.to_thread(fetch_daily_history, ticker)
-        self.push_screen(StockChartScreen(ticker, bars))
+        bars, dividend = await asyncio.gather(
+            asyncio.to_thread(fetch_daily_history, ticker),
+            asyncio.to_thread(fetch_dividend_info, ticker),
+        )
+        self.push_screen(StockChartScreen(ticker, bars, dividend=dividend))
 
 
 def main() -> None:
