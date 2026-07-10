@@ -27,6 +27,20 @@ class RealYieldPoint(BaseModel):
     asof: date
 
 
+RateSource = Literal["fed", "riksbank"]
+
+
+class RatePoint(BaseModel):
+    """A central bank's current policy rate (USA Fed funds / Sweden Riksbank)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    value: float
+    previous: float | None
+    asof: date
+    source: RateSource
+
+
 class EventAnalysis(BaseModel):
     model_config = ConfigDict(frozen=True)
 

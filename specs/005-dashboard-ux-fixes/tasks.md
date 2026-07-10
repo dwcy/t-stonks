@@ -240,32 +240,41 @@ central bank policy rates.
 **Independent Test**: Add `FEDRATE`/`RIKSRATE` to mini-tiles; confirm both show a
 current rate value, refreshed on a slow (4h) cadence.
 
-- [ ] T028 [US7] Extract `fetch_observation(series_id, api_key)` into new
-      `src/goldsilver/data/fred.py`, reusing the `parse_observations()` logic
-      currently duplicated in `yields_service.py`
-- [ ] T029 [US7] Re-point `src/goldsilver/data/yields_service.py` onto
-      `fred.py::fetch_observation` (no behavior change; depends on T028)
-- [ ] T030 [P] [US7] Re-point `src/goldsilver/data/calendar_service.py`'s FRED release-dates
-      call onto the shared key-lookup in `fred.py` where applicable (no behavior
-      change; depends on T028)
-- [ ] T031 [P] [US7] Add `RatePoint` model to `src/marketcore/models_macro.py`
-      (`value`, `previous`, `asof`, `source: Literal["fed", "riksbank"]`)
-- [ ] T032 [P] [US7] Create `src/goldsilver/data/riksbank_client.py` fetching Sweden's
-      policy rate from `developer.api.riksbank.se`'s public REST API
-- [ ] T033 [US7] Create `src/goldsilver/data/rates_service.py` (`RateService`,
+- [X] T028 [US7] Extract shared FRED fetch/parse into new `src/goldsilver/data/fred.py`
+      (`fred_api_key()`, `parse_fred_pair()`, `fetch_fred_pair()`), reusing the
+      observation-parsing logic previously duplicated for real-yield
+- [X] T029 [US7] Re-point `src/goldsilver/data/yields_service.py` onto `fred.py`
+      (kept its public `parse_observations()` wrapper for backward compat with
+      `tests/test_yields_service.py`; no behavior change) (depends on T028)
+- [X] T030 [P] [US7] Re-point `src/goldsilver/data/calendar_service.py`'s FRED
+      release-dates call onto the shared `fred_api_key()` lookup (no behavior
+      change; the `/fred/releases/dates` endpoint itself is unrelated to
+      `fetch_fred_pair`, so only the key lookup is shared) (depends on T028)
+- [X] T031 [P] [US7] Add `RatePoint` model + `RateSource` to
+      `src/marketcore/models_macro.py` (`value`, `previous`, `asof`,
+      `source: Literal["fed", "riksbank"]`); re-exported via the
+      `goldsilver/data/models_macro.py` facade
+- [X] T032 [P] [US7] Create `src/goldsilver/data/riksbank_client.py` fetching Sweden's
+      policy rate from `api.riksbank.se/swea/v1` (live-verified against the real
+      API during implementation — series `SECBREPOEFF`, no key required, current
+      rate 1.75%; "previous" is the last *distinct* value over a 400-day lookback,
+      not just the prior calendar day, since the series repeats the flat value
+      daily between meetings)
+- [X] T033 [US7] Create `src/goldsilver/data/rates_service.py` (`RateService`,
       mirrors `RealYieldService`'s start/stop/refresh_now shape) — FEDRATE via
       `fred.py` + series `DFF`, RIKSRATE via `riksbank_client.py`; 4h refresh cadence
       (depends on T028, T031, T032)
-- [ ] T034 [US7] Create `src/goldsilver/widgets/rate_tile.py` (`RateTile`, reactive
-      `RatePoint`, single-line render matching `RealYieldTile`'s shape) (depends on
-      T031)
-- [ ] T035 [US7] Add `FEDRATE`/`RIKSRATE` to `ALLOWED_MINI_TILES` in
-      `src/goldsilver/data/settings.py`, and wire the `_RATE_IDS` dispatch branch +
-      service start/stop lifecycle in `src/goldsilver/app.py`, per
+- [X] T034 [US7] Create `src/goldsilver/widgets/rate_tile.py` (`RateTile`, reactive
+      `RatePoint`, single-line render matching `RealYieldTile`'s shape, missing-key
+      hint for the fed source only) (depends on T031)
+- [X] T035 [US7] Add `FEDRATE`/`RIKSRATE` to `ALLOWED_MINI_TILES` in
+      `src/goldsilver/data/settings.py` and the mini-tile settings picker label map
+      in `plot_settings.py`; wire `_RATE_SOURCE_BY_ID` dispatch + service
+      start/stop/refresh_now lifecycle in `src/goldsilver/app.py`, per
       `contracts/mini-tile-registry.md` (depends on T033, T034)
-- [ ] T036 [P] [US7] Add `tests/test_rates_service.py` covering FRED `DFF` parsing and
-      Riksbank response parsing; extend `tests/test_minicharts_settings.py` for the
-      two new keys
+- [X] T036 [P] [US7] Add `tests/test_fred.py`, `tests/test_riksbank_client.py`,
+      `tests/test_rates_service.py`, `tests/test_rate_tile.py`; extended
+      `tests/test_minicharts_settings.py` for the two new keys
 
 **Checkpoint**: Interest rate tiles ship independently (after the `fred.py`
 extraction, which only this story needs).

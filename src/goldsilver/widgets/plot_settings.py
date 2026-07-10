@@ -37,6 +37,8 @@ _MINI_TILE_LABEL: dict[str, str] = {
     "RATIO": "Gold/Silver ratio",
     "DXY": "Dollar Index",
     "REALYIELD": "10Y real yield",
+    "FEDRATE": "Fed funds rate",
+    "RIKSRATE": "Riksbank policy rate",
 }
 
 

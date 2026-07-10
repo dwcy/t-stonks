@@ -1,44 +1,36 @@
-"""Polls FRED for the 10Y TIPS real yield (DFII10) a few times per day."""
+"""Polls the current USA (FRED DFF) and Sweden (Riksbank) central bank policy rates."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 import httpx
-from pydantic import ValidationError
 
-from goldsilver.data.fred import fetch_fred_pair, fred_api_key, parse_fred_pair
-from goldsilver.data.models_macro import RealYieldPoint
+from goldsilver.data.fred import fetch_fred_pair, fred_api_key
+from goldsilver.data.models_macro import RatePoint, RateSource
+from goldsilver.data.riksbank_client import fetch_policy_rate
 
-RealYieldHandler = Callable[[RealYieldPoint | None], Awaitable[None] | None]
+RateHandler = Callable[[RatePoint | None], Awaitable[None] | None]
 
-REAL_YIELD_SERIES = "DFII10"
-REAL_YIELD_REFRESH_S = 4 * 3600.0
+FED_FUNDS_SERIES = "DFF"
+RATE_REFRESH_S = 4 * 3600.0
 
 _log = logging.getLogger(__name__)
 
 
-def parse_observations(payload: dict[str, Any]) -> RealYieldPoint | None:
-    """Newest-first FRED observations -> latest + previous valid values."""
-    obs = parse_fred_pair(payload)
-    if obs is None:
-        return None
-    try:
-        return RealYieldPoint(value=obs.value, previous=obs.previous, asof=obs.asof)
-    except ValidationError:
-        return None
+class RateService:
+    """One instance per source — mirrors RealYieldService's start/stop/refresh shape."""
 
-
-class RealYieldService:
     def __init__(
         self,
-        handler: RealYieldHandler | None = None,
+        source: RateSource,
+        handler: RateHandler | None = None,
         *,
-        refresh_interval_s: float = REAL_YIELD_REFRESH_S,
+        refresh_interval_s: float = RATE_REFRESH_S,
     ) -> None:
+        self._source = source
         self._handler = handler
         self._refresh_interval_s = refresh_interval_s
         self._task: asyncio.Task[None] | None = None
@@ -47,7 +39,9 @@ class RealYieldService:
     def start(self) -> None:
         if self._task is None or self._task.done():
             self._stop.clear()
-            self._task = asyncio.create_task(self._run(), name="real-yield-loop")
+            self._task = asyncio.create_task(
+                self._run(), name=f"rate-{self._source}-loop"
+            )
 
     async def stop(self) -> None:
         self._stop.set()
@@ -75,27 +69,40 @@ class RealYieldService:
             await self._refresh_once()
 
     async def _refresh_once(self) -> None:
+        if self._source == "fed":
+            await self._refresh_fed()
+        else:
+            await self._refresh_riksbank()
+
+    async def _refresh_fed(self) -> None:
         key = fred_api_key()
         if not key:
-            # No key configured: tell the tile explicitly rather than staying blank.
             await self._emit(None)
             return
         try:
-            obs = await fetch_fred_pair(REAL_YIELD_SERIES, api_key=key)
+            obs = await fetch_fred_pair(FED_FUNDS_SERIES, api_key=key)
         except (httpx.HTTPError, ValueError):
-            _log.warning("real yield fetch failed", exc_info=True)
+            _log.warning("Fed funds rate fetch failed", exc_info=True)
             return
         if obs is None:
             return
-        try:
-            point = RealYieldPoint(
-                value=obs.value, previous=obs.previous, asof=obs.asof
+        await self._emit(
+            RatePoint(
+                value=obs.value, previous=obs.previous, asof=obs.asof, source="fed"
             )
-        except ValidationError:
-            return
-        await self._emit(point)
+        )
 
-    async def _emit(self, point: RealYieldPoint | None) -> None:
+    async def _refresh_riksbank(self) -> None:
+        obs = await fetch_policy_rate()
+        if obs is None:
+            return
+        await self._emit(
+            RatePoint(
+                value=obs.value, previous=obs.previous, asof=obs.asof, source="riksbank"
+            )
+        )
+
+    async def _emit(self, point: RatePoint | None) -> None:
         if self._handler is None:
             return
         result = self._handler(point)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
@@ -17,6 +16,7 @@ from goldsilver.data.calendar_actuals import (
 )
 from goldsilver.data.calendar_actuals_store import CalendarActualsStore, event_key
 from goldsilver.data.calendar_static import load_static_events, window_around
+from goldsilver.data.fred import fred_api_key
 from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import (
     CalendarDay,
@@ -36,7 +36,6 @@ FetchStartedHandler = Callable[[str], None]
 FetchFinishedHandler = Callable[[str, bool], None]
 
 FRED_URL = "https://api.stlouisfed.org/fred/releases/dates"
-FRED_KEY_ENV = "GOLDSILVER_FRED_KEY"
 CALENDAR_REFRESH_INTERVAL_S = 600.0
 ACTUALS_CHECK_INTERVAL_S = 60.0
 _HIGH_IMPORTANCE_RELEASES = frozenset(
@@ -76,9 +75,7 @@ class CalendarService:
     ) -> None:
         self._handler = handler
         self._refresh_interval_s = refresh_interval_s
-        self._fred_key = (
-            fred_key if fred_key is not None else os.environ.get(FRED_KEY_ENV)
-        )
+        self._fred_key = fred_key if fred_key is not None else fred_api_key()
         self._actuals_provider = actuals_settings_provider
         self._actuals_store = actuals_store or CalendarActualsStore()
         self._on_fetch_started = on_fetch_started

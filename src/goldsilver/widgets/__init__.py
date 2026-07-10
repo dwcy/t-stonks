@@ -14,6 +14,7 @@ from goldsilver.widgets.news_log_screen import NewsLogScreen
 from goldsilver.widgets.news_panel import NewsPanel
 from goldsilver.widgets.omx_strip import OmxStrip
 from goldsilver.widgets.plot_settings import PlotSettings, PlotSettingsScreen
+from goldsilver.widgets.rate_tile import RateTile
 from goldsilver.widgets.ratio_tile import RatioTile
 from goldsilver.widgets.report_unavailable import ReportUnavailableScreen
 from goldsilver.widgets.report_watchlist import ReportWatchlistScreen
@@ -42,6 +43,7 @@ __all__ = [
     "PlotSettings",
     "PlotSettingsScreen",
     "PriceChart",
+    "RateTile",
     "RatioTile",
     "RealYieldTile",
     "ReportUnavailableScreen",

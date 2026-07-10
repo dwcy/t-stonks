@@ -44,6 +44,8 @@ from goldsilver.data.models_macro import (
     InsiderTrade,
     NewsItem,
     OmxSnapshot,
+    RatePoint,
+    RateSource,
     RealYieldPoint,
     Signal,
     StockQuote,
@@ -65,6 +67,7 @@ from goldsilver.settings_sync import apply_settings_change
 from goldsilver.data.alerts import PriceAlertEngine
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
+from goldsilver.data.rates_service import RateService
 from goldsilver.data.trades_service import TradesService
 from goldsilver.data.yields_service import RealYieldService
 from goldsilver.widgets import (
@@ -84,6 +87,7 @@ from goldsilver.widgets import (
     OmxStrip,
     PlotSettings,
     PlotSettingsScreen,
+    RateTile,
     RatioTile,
     RealYieldTile,
     StockRow,
@@ -100,6 +104,7 @@ _FX_PAIR_IDS: frozenset[str] = frozenset({"USDSEK", "CADSEK", "EURSEK"})
 _COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC", "DXY"})
 _RATIO_ID = "RATIO"
 _REAL_YIELD_ID = "REALYIELD"
+_RATE_SOURCE_BY_ID: dict[str, str] = {"FEDRATE": "fed", "RIKSRATE": "riksbank"}
 
 TIMEFRAMES: list[tuple[str, str, str, str | None]] = [
     ("today", "2d", "1m", "today"),
@@ -160,6 +165,13 @@ class GoldSilverApp(App[None]):
         self._last_yield_point: RealYieldPoint | None = None
         self._yield_received = False
         self._yields_service = RealYieldService(handler=self._on_real_yield)
+        self._rate_tiles: dict[str, RateTile] = {}
+        self._last_rate_point: dict[str, RatePoint | None] = {}
+        self._rate_received: dict[str, bool] = {}
+        self._fed_rate_service = RateService("fed", handler=self._on_fed_rate)
+        self._riksbank_rate_service = RateService(
+            "riksbank", handler=self._on_riksbank_rate
+        )
         self._alert_engine = PriceAlertEngine()
         self._calendar_panel: CalendarPanel | None = None
         self._calendar_event_screen: CalendarEventScreen | None = None
@@ -316,6 +328,7 @@ class GoldSilverApp(App[None]):
         self._commodity_tiles.clear()
         self._ratio_tile = None
         self._yield_tile = None
+        self._rate_tiles.clear()
         widgets: list[Static] = []
         for i, tile_id in enumerate(self._settings.mini_tiles):
             if i > 0:
@@ -336,6 +349,11 @@ class GoldSilverApp(App[None]):
             elif tile_id == _REAL_YIELD_ID:
                 self._yield_tile = RealYieldTile()
                 widgets.append(self._yield_tile)
+            elif tile_id in _RATE_SOURCE_BY_ID:
+                source = cast(RateSource, _RATE_SOURCE_BY_ID[tile_id])
+                rate_tile = RateTile(source)
+                self._rate_tiles[tile_id] = rate_tile
+                widgets.append(rate_tile)
         return widgets
 
     def _build_metals(self) -> None:
@@ -422,6 +440,8 @@ class GoldSilverApp(App[None]):
         self._insider_service.start()
         self._stocktwits_service.start()
         self._yields_service.start()
+        self._fed_rate_service.start()
+        self._riksbank_rate_service.start()
         self._seed_all()
         if self._settings.simulator.enabled:
             self._start_simulator_replay()
@@ -443,6 +463,8 @@ class GoldSilverApp(App[None]):
         await self._insider_service.stop()
         await self._stocktwits_service.stop()
         await self._yields_service.stop()
+        await self._fed_rate_service.stop()
+        await self._riksbank_rate_service.stop()
 
     def _seed_all(self) -> None:
         for symbol in self._panels:
@@ -760,6 +782,25 @@ class GoldSilverApp(App[None]):
         if self._yield_tile is not None and self._yield_received:
             self._yield_tile.apply_point(self._last_yield_point)
 
+    async def _on_fed_rate(self, point: RatePoint | None) -> None:
+        self._rate_received["FEDRATE"] = True
+        self._last_rate_point["FEDRATE"] = point
+        self._update_rate_tile("FEDRATE")
+
+    async def _on_riksbank_rate(self, point: RatePoint | None) -> None:
+        self._rate_received["RIKSRATE"] = True
+        self._last_rate_point["RIKSRATE"] = point
+        self._update_rate_tile("RIKSRATE")
+
+    def _update_rate_tile(self, tile_id: str) -> None:
+        tile = self._rate_tiles.get(tile_id)
+        if tile is not None and self._rate_received.get(tile_id, False):
+            tile.apply_point(self._last_rate_point.get(tile_id))
+
+    def _update_rate_tiles(self) -> None:
+        for tile_id in self._rate_tiles:
+            self._update_rate_tile(tile_id)
+
     async def _on_fx_rate(self, rate: FxRate) -> None:
         tile = self._fx_tiles.get(rate.pair)
         if tile is not None:
@@ -829,6 +870,7 @@ class GoldSilverApp(App[None]):
         strip.display = bool(new_widgets)
         self._update_ratio_tile()
         self._update_yield_tile()
+        self._update_rate_tiles()
 
     def _apply_news_panel(self) -> None:
         if self._news_panel is None:
@@ -1086,6 +1128,8 @@ class GoldSilverApp(App[None]):
         await self._insider_service.refresh_now()
         await self._stocktwits_service.refresh_now()
         await self._yields_service.refresh_now()
+        await self._fed_rate_service.refresh_now()
+        await self._riksbank_rate_service.refresh_now()
         self._seed_all()
 
     def action_cycle_zoom(self) -> None:
@@ -1120,6 +1164,7 @@ class GoldSilverApp(App[None]):
         self._apply_news_panel()
         self._update_ratio_tile()
         self._update_yield_tile()
+        self._update_rate_tiles()
         self._seed_all()
         self.run_worker(
             self._refresh_context_feeds(), exclusive=False, group="ctx-refresh"
@@ -1136,6 +1181,8 @@ class GoldSilverApp(App[None]):
         await self._insider_service.refresh_now()
         await self._stocktwits_service.refresh_now()
         await self._yields_service.refresh_now()
+        await self._fed_rate_service.refresh_now()
+        await self._riksbank_rate_service.refresh_now()
 
     def action_toggle_crosshair(self) -> None:
         if self._chart_mode != "live":
