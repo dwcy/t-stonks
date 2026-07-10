@@ -11,7 +11,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
 from goldsilver.data.models_macro import NewsItem
-from goldsilver.widgets.news_panel import render_news_row
+from goldsilver.widgets.news_panel import NewsBody, render_news_row
 
 
 class NewsLogScreen(ModalScreen[None]):
@@ -25,7 +25,7 @@ class NewsLogScreen(ModalScreen[None]):
         with Container(id="news-log-dialog"):
             yield Static("News log", id="news-log-title")
             with VerticalScroll(id="news-log-body"):
-                yield Static(self._build_text(), id="news-log-text")
+                yield NewsBody(self._build_text(), id="news-log-text")
             yield Button("Close", id="news-log-close")
 
     def _build_text(self) -> Text:

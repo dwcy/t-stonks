@@ -93,13 +93,13 @@ shippable.
 **Independent Test**: Click "read more" on any item with a link; confirm the browser
 opens the correct article.
 
-- [ ] T009 [US2] Attach `meta={"news_url": item.url}` to each item's title span (only
+- [X] T009 [US2] Attach `meta={"news_url": item.url}` to each item's title span (only
       when `item.url` is truthy) in `src/goldsilver/widgets/news_panel.py`'s render
       function, per `contracts/click-region-interactions.md`
-- [ ] T010 [US2] Add `on_click` handler to the news panel reading
+- [X] T010 [US2] Add `on_click` handler to the news panel reading
       `event.style.meta.get("news_url")` and calling `webbrowser.open(url)` when
       present, in `src/goldsilver/widgets/news_panel.py` (depends on T009)
-- [ ] T011 [P] [US2] Add a test asserting no "read more" affordance is emitted for
+- [X] T011 [P] [US2] Add a test asserting no "read more" affordance is emitted for
       items with a missing/malformed URL, in `tests/test_news_time.py` or a new
       `tests/test_news_panel_click.py`
 
