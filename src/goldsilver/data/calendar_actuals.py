@@ -11,6 +11,7 @@ from typing import cast
 
 from pydantic import BaseModel, ValidationError
 
+from goldsilver.data.calendar_actuals_store import event_key
 from goldsilver.data.models_macro import (
     CalendarDay,
     CalendarEvent,
@@ -178,19 +179,15 @@ class ActualsFetcher:
     def __init__(self, *, max_concurrency: int = 2, timeout_seconds: int = 180) -> None:
         self._sem = asyncio.Semaphore(max(1, max_concurrency))
         self._timeout_seconds = timeout_seconds
-        self._dispatched: set[tuple[str, str]] = set()
-
-    @staticmethod
-    def _key(event: CalendarEvent) -> tuple[str, str]:
-        return (event.source, event.scheduled_time.isoformat() + "|" + event.title)
+        self._dispatched: set[str] = set()
 
     def should_fetch(self, event: CalendarEvent) -> bool:
-        return self._key(event) not in self._dispatched
+        return event_key(event) not in self._dispatched
 
     async def fetch(
         self, event: CalendarEvent, same_day_events: tuple[str, ...] = ()
     ) -> CalendarEvent | None:
-        key = self._key(event)
+        key = event_key(event)
         if key in self._dispatched:
             return None
         self._dispatched.add(key)

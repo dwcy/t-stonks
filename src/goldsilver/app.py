@@ -171,6 +171,8 @@ class GoldSilverApp(App[None]):
         self._calendar_service = CalendarService(
             handler=self._on_calendar,
             actuals_settings_provider=lambda: self._settings.calendar,
+            on_fetch_started=self._on_calendar_fetch_started,
+            on_fetch_finished=self._on_calendar_fetch_finished,
         )
         self._fx_service = FxService(
             handler=self._on_fx_rate,
@@ -678,6 +680,14 @@ class GoldSilverApp(App[None]):
     async def _on_calendar(self, snapshot: CalendarSnapshot) -> None:
         if self._calendar_panel is not None:
             self._calendar_panel.apply_snapshot(snapshot)
+
+    def _on_calendar_fetch_started(self, key: str) -> None:
+        if self._calendar_panel is not None:
+            self._calendar_panel.apply_fetch_started(key)
+
+    def _on_calendar_fetch_finished(self, key: str, ok: bool) -> None:
+        if self._calendar_panel is not None:
+            self._calendar_panel.apply_fetch_finished(key, ok)
 
     def _show_calendar_event(self, event: CalendarEvent) -> None:
         screen = CalendarEventScreen(

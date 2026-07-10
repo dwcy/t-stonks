@@ -148,19 +148,22 @@ in flight.
 **Independent Test**: Wait for an event's scheduled time to pass by ~1 minute;
 confirm a spinner appears until the actual value (or "unavailable") resolves.
 
-- [ ] T016 [US4] Add `on_fetch_started(event_id)` / `on_fetch_finished(event_id, ok)`
-      callback hooks to `ActualsFetcher` in `src/goldsilver/data/calendar_actuals.py`,
-      invoked around the existing `due_events()`-triggered fetch
-- [ ] T017 [US4] Track `_fetching_event_ids: set[str]` in
-      `src/goldsilver/widgets/calendar_panel.py`, wired to the new callbacks (depends
-      on T016)
-- [ ] T018 [US4] Reuse the `_SPINNER_FRAMES` / `set_interval(0.12, ...)` pattern from
-      `src/goldsilver/widgets/report_watchlist.py` to animate a row's spinner while
-      its `event_id` is in `_fetching_event_ids`, in
+- [X] T016 [US4] Add `on_fetch_started(key)` / `on_fetch_finished(key, ok)` callback
+      hooks to `CalendarService` in `src/goldsilver/data/calendar_service.py`
+      (`_fetch_and_notify`, wrapping the existing `_check_due()`-triggered
+      `fetcher.fetch(...)` calls), keyed by the existing
+      `calendar_actuals_store.event_key(event) -> str` rather than inventing a new
+      key type
+- [X] T017 [US4] Track `_fetching: set[str]` in
+      `src/goldsilver/widgets/calendar_panel.py` via new `apply_fetch_started`/
+      `apply_fetch_finished` methods, wired from `app.py` (depends on T016)
+- [X] T018 [US4] Reuse the `_SPINNER_FRAMES` / `set_interval(0.12, ...)` pattern from
+      `src/goldsilver/widgets/report_watchlist.py` to animate a row's spinner when
+      `event_key(event)` is in `_fetching`, in
       `src/goldsilver/widgets/calendar_panel.py` (depends on T017)
-- [ ] T019 [P] [US4] Extend `tests/test_calendar_panel.py` and
-      `tests/test_calendar_actuals.py` with spinner-state and callback-firing
-      assertions
+- [X] T019 [P] [US4] Extend `tests/test_calendar_panel.py` and
+      `tests/test_calendar_service_actuals.py` with spinner-state and
+      callback-firing assertions
 
 **Checkpoint**: Calendar auto-fetch feedback ships independently.
 

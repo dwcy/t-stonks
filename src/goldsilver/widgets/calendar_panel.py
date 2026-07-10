@@ -11,11 +11,13 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.reactive import reactive
 from textual.widgets import Static
 
+from goldsilver.data.calendar_actuals_store import event_key
 from goldsilver.data.models_macro import CalendarDay, CalendarEvent, CalendarSnapshot
 from goldsilver.data.session import STOCKHOLM, stockholm_now
 
 
 COMPACT_MAX_EVENTS = 3
+_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
 class _CalendarBody(Static):
@@ -89,10 +91,40 @@ class CalendarPanel(Horizontal):
         self.border_title = "Macro Calendar"
         self._compact: bool = False
         self._on_event_selected = on_event_selected
+        self._fetching: set[str] = set()
+        self._spinner_frame = 0
+        self._spinner_timer = None
 
     def _pick_event(self, event: CalendarEvent) -> None:
         if self._on_event_selected is not None:
             self._on_event_selected(event)
+
+    def apply_fetch_started(self, key: str) -> None:
+        self._fetching.add(key)
+        self._start_spinner()
+        self._refresh_body()
+
+    def apply_fetch_finished(self, key: str, ok: bool) -> None:
+        self._fetching.discard(key)
+        if not self._fetching:
+            self._stop_spinner()
+        self._refresh_body()
+
+    def _start_spinner(self) -> None:
+        if self._spinner_timer is None:
+            self._spinner_timer = self.set_interval(0.12, self._tick_spinner)
+
+    def _stop_spinner(self) -> None:
+        if self._spinner_timer is not None:
+            self._spinner_timer.stop()
+            self._spinner_timer = None
+
+    def _tick_spinner(self) -> None:
+        self._spinner_frame = (self._spinner_frame + 1) % len(_SPINNER_FRAMES)
+        self._refresh_body()
+
+    def on_unmount(self) -> None:
+        self._stop_spinner()
 
     def compose(self) -> ComposeResult:
         for bucket in ("today", "upcoming"):
@@ -282,6 +314,9 @@ class CalendarPanel(Horizontal):
         suffix = self._released_suffix(event)
         if suffix is not None:
             text.append(suffix, style=("dim " if passed else "") + _RELEASED_STYLE)
+        elif event_key(event) in self._fetching:
+            frame = _SPINNER_FRAMES[self._spinner_frame]
+            text.append(f"  {frame} fetching…", style="#ffd56b")
         self._tag_event(text, row_start, len(text), event)
         text.append("\n", style=title_style)
 
