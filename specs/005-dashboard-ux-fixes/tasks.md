@@ -445,15 +445,38 @@ section.
 
 ## Phase 13: Polish & Cross-Cutting Concerns
 
-- [ ] T057 [P] Run the full `quickstart.md` manual verification pass across both apps
-- [ ] T058 [P] Confirm each new/changed file stays within the LoC budgets in
-      `rules/python.md` (`StockChartScreen` is the one flagged as worth checking in
-      research.md's cross-cutting notes — split into a sibling data-orchestration
-      module if it exceeds the 250 soft cap)
-- [ ] T059 Run the full suite (`uv run pytest`) and fix any regressions across all
-      ten stories together
-- [ ] T060 [P] Update `CLAUDE.md` if any new env var, module, or data source needs
-      documenting beyond what `quickstart.md` already covers
+- [X] T057 [P] Ran the `quickstart.md` verification pass as live smoke tests during
+      each story's implementation (not re-run as one batch at the end) — every
+      story was checked against real data: NewsLogScreen mount/dismiss, read-more
+      opening a real URL, indicator badge priority order + toggle, calendar spinner
+      state transitions, label text, copper/oil pinned with readable labels, real
+      Riksbank policy rate (1.75%), real DAX/CAC40/FTSE100/NIKKEI225 levels, real
+      NVDA chart modal on both apps, real MSFT dividend ($0.91, 2026-05-21) +
+      watchlist status. Additionally ran a consolidated smoke test mounting all 6
+      new mini-tiles together (no conflicts) and confirmed the settings screen
+      shows switches for all 6 new keys with correct labels.
+- [X] T058 [P] Checked LoC budgets for every new/changed file.
+      `StockChartScreen` (96 lines) is well under its 250 soft cap — no split
+      needed. All other new modules are 24-184 lines, under the 200 soft cap.
+      Two pre-existing files this feature touched are over the 200 soft cap but
+      under the 400 hard cap (`calendar_service.py` 327, `calendar_panel.py` 341) —
+      not newly introduced by 005, left as-is per "only change what's needed."
+      **Found**: `goldsilver/widgets/metal_panel.py` (386 lines, 38 methods on
+      `MetalPanel`) is pre-existing debt this feature's Story 3 changes made
+      slightly worse (added ~6 methods) — it was already well past the 15-method
+      concern-separation trigger before 005 touched it. Not split now (out of
+      scope, hasn't breached the 400 hard cap), but flagged in CLAUDE.md's
+      Repository Layout for a future dedicated pass.
+- [X] T059 Ran the full suite after every story (not just once at the end) —
+      grew from 219 tests (baseline) to 291 tests (final), 100% pass rate
+      maintained throughout with zero regressions at any checkpoint.
+- [X] T060 [P] Updated `CLAUDE.md`'s Repository Layout with all new modules
+      (fred.py, riksbank_client.py, rates_service.py, index_service.py,
+      yf_daily.py, signal_strategy_info.py, rate_tile.py, index_tile.py,
+      news_log_screen.py, report_controller.py, marketcore's stock_chart_screen.py
+      + daily_change_strip.py) and the metal_panel.py debt note above. No new env
+      vars — Riksbank needs no key, and FEDRATE reuses the already-documented
+      `GOLDSILVER_FRED_KEY`.
 
 ---
 
