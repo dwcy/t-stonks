@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -56,6 +57,7 @@ from goldsilver.data.models_macro import (
 from goldsilver.data.models_futures import FuturesSnapshot
 from goldsilver.data.settings import AppSettings
 from goldsilver.data.stock_presets import extra_row_tickers
+from goldsilver.data.stock_service import fetch_daily_history
 from goldsilver.data.signal_strategies import (
     SignalStrategy,
     STRATEGY_REGISTRY,
@@ -94,6 +96,7 @@ from goldsilver.widgets import (
     RateTile,
     RatioTile,
     RealYieldTile,
+    StockChartScreen,
     StockRow,
     StockTwitsPanel,
     TradeSimulatorScreen,
@@ -314,12 +317,16 @@ class GoldSilverApp(App[None]):
         self._omx_strip = OmxStrip()
         self._futures_strip = FuturesStrip()
         self._futures_strip.display = s.show_futures
-        self._stock_row = StockRow(list(s.stock_tickers))
+        self._stock_row = StockRow(
+            list(s.stock_tickers), on_chart_requested=self._show_stock_chart
+        )
         self._stock_row.add_class("primary-stocks")
         if not s.show_stock_row or not s.stock_tickers:
             self._stock_row.display = False
         extra_tickers = self._extra_row_tickers()
-        self._extra_stock_row = StockRow(extra_tickers)
+        self._extra_stock_row = StockRow(
+            extra_tickers, on_chart_requested=self._show_stock_chart
+        )
         if not s.show_stock_row or not extra_tickers:
             self._extra_stock_row.display = False
         self._build_metals()
@@ -746,6 +753,15 @@ class GoldSilverApp(App[None]):
 
     def _on_calendar_event_closed(self, _result: None) -> None:
         self._calendar_event_screen = None
+
+    def _show_stock_chart(self, ticker: str) -> None:
+        self.run_worker(
+            self._load_stock_chart(ticker), exclusive=False, group="stock-chart"
+        )
+
+    async def _load_stock_chart(self, ticker: str) -> None:
+        bars = await asyncio.to_thread(fetch_daily_history, ticker)
+        self.push_screen(StockChartScreen(ticker, bars))
 
     def _fetch_event_actuals(self, event: CalendarEvent) -> None:
         self.run_worker(

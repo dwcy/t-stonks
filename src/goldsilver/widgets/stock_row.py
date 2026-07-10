@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 
 from textual.app import ComposeResult
@@ -13,16 +14,22 @@ TILES_PER_ROW = 4
 
 
 class StockRow(Grid):
-    def __init__(self, tickers: list[str]) -> None:
+    def __init__(
+        self,
+        tickers: list[str],
+        *,
+        on_chart_requested: Callable[[str], None] | None = None,
+    ) -> None:
         super().__init__()
         self._tickers = list(tickers)
+        self._on_chart_requested = on_chart_requested
         self._tiles: dict[str, StockTile] = {}
         self.add_class("stock-row")
         self._apply_layout_classes()
 
     def compose(self) -> ComposeResult:
         for ticker in self._tickers:
-            tile = StockTile(ticker)
+            tile = StockTile(ticker, on_chart_requested=self._on_chart_requested)
             self._tiles[ticker] = tile
             yield tile
 
@@ -50,7 +57,7 @@ class StockRow(Grid):
         self._apply_layout_classes()
         new_tiles: list[StockTile] = []
         for ticker in self._tickers:
-            tile = StockTile(ticker)
+            tile = StockTile(ticker, on_chart_requested=self._on_chart_requested)
             self._tiles[ticker] = tile
             new_tiles.append(tile)
         if new_tiles:

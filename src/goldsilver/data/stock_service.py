@@ -8,6 +8,7 @@ from marketcore.services.stock_service import (
     StockService,
     _NAME_CACHE,
     _resolve_display_name,
+    fetch_daily_history,
     fetch_single_quote,
     register_names,
     yf,
@@ -22,5 +23,6 @@ __all__ = [
     "MAX_SPARK_POINTS",
     "STOCK_REFRESH_INTERVAL_S",
     "StockService",
+    "fetch_daily_history",
     "fetch_single_quote",
 ]

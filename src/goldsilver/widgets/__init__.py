@@ -19,6 +19,7 @@ from goldsilver.widgets.rate_tile import RateTile
 from goldsilver.widgets.ratio_tile import RatioTile
 from goldsilver.widgets.report_unavailable import ReportUnavailableScreen
 from goldsilver.widgets.report_watchlist import ReportWatchlistScreen
+from goldsilver.widgets.stock_chart_screen import StockChartScreen
 from goldsilver.widgets.stock_row import StockRow
 from goldsilver.widgets.stock_tile import StockTile
 from goldsilver.widgets.stocktwits_panel import StockTwitsPanel
@@ -50,6 +51,7 @@ __all__ = [
     "RealYieldTile",
     "ReportUnavailableScreen",
     "ReportWatchlistScreen",
+    "StockChartScreen",
     "StockRow",
     "StockTile",
     "StockTwitsPanel",

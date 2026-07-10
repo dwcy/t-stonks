@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from datetime import datetime
 
 from textual.app import App, ComposeResult
@@ -12,7 +13,12 @@ from textual.widgets import Footer, Header, Label
 
 from marketcore.models_macro import NewsItem, StockQuote
 from marketcore.services.news_service import NewsService
-from marketcore.services.stock_service import StockService, register_names
+from marketcore.services.stock_service import (
+    StockService,
+    fetch_daily_history,
+    register_names,
+)
+from marketcore.widgets.stock_chart_screen import StockChartScreen
 from marketcore.widgets.stock_tile import StockTile
 
 from quantum.data.news_feeds import QUANTUM_NEWS_FEEDS
@@ -60,14 +66,14 @@ class QuantumApp(App[None]):
             yield Label("Quantum ETFs", classes="section-title")
             with Horizontal(id="etf-row"):
                 for ticker in self._settings.etf_tickers:
-                    tile = StockTile(ticker)
+                    tile = StockTile(ticker, on_chart_requested=self._show_stock_chart)
                     tile.add_class("etf-tile")
                     self._tiles[ticker] = tile
                     yield tile
             yield Label("Pure-play quantum stocks", classes="section-title")
             with Horizontal(id="stock-row"):
                 for ticker in self._settings.stock_tickers:
-                    tile = StockTile(ticker)
+                    tile = StockTile(ticker, on_chart_requested=self._show_stock_chart)
                     self._tiles[ticker] = tile
                     yield tile
             if self._settings.news_enabled:
@@ -123,6 +129,15 @@ class QuantumApp(App[None]):
         await self._stock_service.refresh_now()
         if self._news_service is not None:
             await self._news_service.refresh_now()
+
+    def _show_stock_chart(self, ticker: str) -> None:
+        self.run_worker(
+            self._load_stock_chart(ticker), exclusive=False, group="stock-chart"
+        )
+
+    async def _load_stock_chart(self, ticker: str) -> None:
+        bars = await asyncio.to_thread(fetch_daily_history, ticker)
+        self.push_screen(StockChartScreen(ticker, bars))
 
 
 def main() -> None:

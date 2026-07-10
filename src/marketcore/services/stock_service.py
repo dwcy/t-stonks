@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import yfinance as yf
 from pydantic import ValidationError
 
+from marketcore.models import Bar
 from marketcore.models_macro import StockQuote
 from marketcore.services.base import PollingService
 
@@ -176,3 +177,33 @@ def fetch_single_quote(sym: str) -> StockQuote | None:
         )
     except ValidationError:
         return None
+
+
+def fetch_daily_history(sym: str, *, period: str = "3mo") -> list[Bar]:
+    """Daily OHLCV bars for the chart-detail modal (Story 9) — one-shot, not polled."""
+    try:
+        df = yf.Ticker(sym).history(period=period, interval="1d")
+    except Exception:
+        return []
+    if df is None or len(df) == 0:
+        return []
+    bars: list[Bar] = []
+    for ts, row in df.iterrows():
+        t = ts.to_pydatetime()
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        try:
+            bars.append(
+                Bar(
+                    symbol=sym,
+                    time=t.astimezone(timezone.utc),
+                    open=float(row["Open"]),
+                    high=float(row["High"]),
+                    low=float(row["Low"]),
+                    close=float(row["Close"]),
+                    volume=float(row["Volume"]),
+                )
+            )
+        except (ValueError, KeyError, ValidationError):
+            continue
+    return bars

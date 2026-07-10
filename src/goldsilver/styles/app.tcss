@@ -1010,6 +1010,39 @@ NewsLogScreen {
     margin-top: 1;
 }
 
+StockChartScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+#stock-chart-dialog {
+    width: 100;
+    height: auto;
+    padding: 1 2;
+    background: #14141c;
+    border: round #8ab4ff;
+    layout: vertical;
+}
+
+#stock-chart-title {
+    width: 100%;
+    height: auto;
+    color: #e8e8f0;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.daily-change-strip {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+}
+
+#stock-chart-close {
+    width: 18;
+    margin-top: 1;
+}
+
 PlotSettingsScreen .sub-label {
     color: #7a7a8a;
     height: 1;

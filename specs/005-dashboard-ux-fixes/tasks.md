@@ -335,33 +335,51 @@ chart and a 40-day up/down history strip.
 **Independent Test**: Click a stock tile's mini chart; confirm the modal opens with a
 chart + strip, and closes back to an unaffected live dashboard.
 
-- [ ] T043 [P] [US9] Add `DailyChange` model to `src/marketcore/models.py` (`date`,
-      `close`, `change_percent`, `direction`)
-- [ ] T044 [US9] Add `fetch_daily_history(ticker, period="3mo")` to
+- [X] T043 [P] [US9] Add `DailyChange` model to `src/marketcore/models.py` (`date`,
+      `close`, `change_percent`, `direction`); re-exported via `goldsilver/data/models.py`
+- [X] T044 [US9] Add `fetch_daily_history(ticker, period="3mo")` to
       `src/marketcore/services/stock_service.py`, converting `yf.Ticker(...).history()`
-      into `Bar` models (depends on nothing new — reuses existing `Bar`)
-- [ ] T045 [US9] Add `on_click` to `_StockSpark` in
-      `src/marketcore/widgets/stock_tile.py`, posting a message carrying the tile's
-      ticker (confirmed no conflicting click handler exists)
-- [ ] T046 [US9] Create `src/goldsilver/widgets/daily_change_strip.py` — small widget
-      rendering up to 40 `DailyChange` entries as `▲+1.2%`/`▼-0.8%` tokens using
-      `widgets/format.py`'s existing `UP_COLOR`/`DOWN_COLOR` palette (depends on
-      T043)
-- [ ] T047 [US9] Create `src/goldsilver/widgets/stock_chart_screen.py` —
+      into `Bar` models; re-exported via `goldsilver/data/stock_service.py`
+- [X] T045 [US9] Add `on_click` to `_StockSpark` in
+      `src/marketcore/widgets/stock_tile.py`. Used a constructor-injected
+      `on_click_chart` callback (threaded through `StockTile.__init__` and
+      `StockRow.__init__`) rather than a bubbling `Message` class — matches the
+      proven pattern already used by `_CalendarBody`/`_ChangeRow` in this codebase,
+      and avoided relying on Textual's message-handler-name inference across two
+      different app classes.
+- [X] T046 [US9] Create `src/marketcore/widgets/daily_change_strip.py` (not
+      `goldsilver/widgets/` as originally planned) — small widget rendering up to 40
+      `DailyChange` entries as `▲+1.2%`/`▼-0.8%` tokens using
+      `marketcore/widgets/format.py`'s `UP_COLOR`/`DOWN_COLOR`/`FLAT_COLOR` palette
+      (depends on T043)
+- [X] T047 [US9] Create `src/marketcore/widgets/stock_chart_screen.py` (not
+      `goldsilver/widgets/` as originally planned — **deviation, deliberate**:
+      quantum's `app.py` imports `StockTile` directly from `marketcore` with no
+      goldsilver dependency; putting the modal in `goldsilver/widgets/` would have
+      made it unreachable from quantum without a cross-app import, which
+      `tests/marketcore/test_import_direction.py` and the project's own
+      architecture rule forbid. A thin `goldsilver/widgets/stock_chart_screen.py`
+      facade re-exports it for goldsilver's own import-style consistency) —
       `StockChartScreen(ModalScreen[None])` per `contracts/chart-detail-modal.md`,
-      composing a `PriceChart` (fed via `.seed(bars, ...)`) + the history strip
-      (chart/strip sections only — report/dividend sections added in US10) (depends
-      on T043, T046)
-- [ ] T048 [US9] Add `_show_stock_chart(ticker)` to `src/goldsilver/app.py`, calling
-      `fetch_daily_history()` and pushing `StockChartScreen`, mirroring the existing
-      `_show_calendar_event` pattern (depends on T044, T045, T047)
-- [ ] T049 [P] [US9] Add the same `_show_stock_chart(ticker)` wiring to
+      composing a `PriceChart` (fed via `.seed(bars, kind="line")`) + the history
+      strip (chart/strip sections only — report/dividend sections added in US10)
+      (depends on T043, T046)
+- [X] T048 [US9] Add `_show_stock_chart(ticker)` to `src/goldsilver/app.py` (a
+      `run_worker`-dispatched async fetch + push, since unlike
+      `_show_calendar_event` this needs a network fetch first) and thread
+      `on_chart_requested` through `StockRow`'s two `StockTile` construction sites
+      (`_stock_row`/`_extra_stock_row` — `MetalPanel`'s own gold/silver chart is a
+      different always-visible `PriceChart`, not a `StockTile`, so it's unaffected)
+      (depends on T044, T045, T047)
+- [X] T049 [P] [US9] Add the same `_show_stock_chart(ticker)` wiring to
       `src/quantum/app.py` for its own `StockTile` instances (depends on T044, T045,
       T047)
-- [ ] T050 [P] [US9] Add `tests/marketcore/test_stock_history.py` for
-      `fetch_daily_history()` parsing and `DailyChange` derivation; add
-      `tests/test_stock_chart_screen.py` (Pilot-based mount/render smoke test) for
-      the modal's chart + strip sections
+- [X] T050 [P] [US9] Add `tests/marketcore/test_stock_history.py`
+      (`fetch_daily_history()` + `compute_daily_changes()`),
+      `tests/marketcore/test_stock_tile_click.py` (click-to-request forwarding), and
+      `tests/marketcore/test_stock_chart_screen.py` (Pilot-based mount/render smoke
+      tests, including zero-bars and close-button paths). Live-verified against
+      real NVDA data on both `goldsilver` and `quantum` during implementation.
 
 **Checkpoint**: Chart detail modal ships independently across both apps.
 

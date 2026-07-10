@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.css.query import NoMatches
@@ -22,9 +24,13 @@ class _StockSpark(PlotextPlot):
     }
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self, ticker: str, *, on_click_chart: Callable[[str], None] | None = None
+    ) -> None:
         super().__init__()
         self.theme = "clear"
+        self._ticker = ticker
+        self._on_click_chart = on_click_chart
         self._closes: tuple[float, ...] = ()
         self._color: tuple[int, int, int] = (160, 160, 180)
 
@@ -37,6 +43,11 @@ class _StockSpark(PlotextPlot):
 
     def on_mount(self) -> None:
         self._redraw()
+
+    def on_click(self, event: events.Click) -> None:
+        if self._on_click_chart is not None:
+            self._on_click_chart(self._ticker)
+            event.stop()
 
     def _redraw(self) -> None:
         self.plt.clear_figure()
@@ -52,15 +63,21 @@ class StockTile(Vertical):
     quote: reactive[StockQuote | None] = reactive(None)
     stale_since: reactive[datetime | None] = reactive(None)
 
-    def __init__(self, ticker: str) -> None:
+    def __init__(
+        self,
+        ticker: str,
+        *,
+        on_chart_requested: Callable[[str], None] | None = None,
+    ) -> None:
         super().__init__()
         self.ticker = ticker
+        self._on_chart_requested = on_chart_requested
         self._first_seen_at = datetime.now(timezone.utc)
         self.add_class("stock-tile")
 
     def compose(self) -> ComposeResult:
         yield Static(self._render_header(), id="stock-head", classes="stock-head")
-        yield _StockSpark()
+        yield _StockSpark(self.ticker, on_click_chart=self._on_chart_requested)
 
     def apply_quote(self, quote: StockQuote) -> None:
         self.stale_since = None
