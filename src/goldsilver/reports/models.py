@@ -8,7 +8,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from goldsilver.reports.constants import METAL_LABELS, PINNED_METALS, safe_name
+from goldsilver.reports.constants import (
+    METAL_LABELS,
+    PINNED_COMMODITIES,
+    PINNED_METALS,
+    safe_name,
+)
 
 
 class ReportStatus(str, Enum):
@@ -38,7 +43,7 @@ class USMarketState(str, Enum):
     NEAR_CLOSE = "NEAR_CLOSE"
 
 
-TickerKind = Literal["metal", "stock"]
+TickerKind = Literal["metal", "commodity", "stock"]
 Impact = Literal["Positive", "Neutral", "Negative"]
 Call = Literal["BUY", "HOLD", "SELL"]
 
@@ -70,6 +75,12 @@ class ReportTicker:
         return cls(symbol, METAL_LABELS.get(symbol, symbol), pinned=True, kind="metal")
 
     @classmethod
+    def commodity(cls, symbol: str) -> "ReportTicker":
+        return cls(
+            symbol, METAL_LABELS.get(symbol, symbol), pinned=True, kind="commodity"
+        )
+
+    @classmethod
     def stock(cls, symbol: str) -> "ReportTicker":
         return cls(symbol, symbol, pinned=False, kind="stock")
 
@@ -81,6 +92,10 @@ class ReportTicker:
 
 def pinned_metal_tickers() -> list[ReportTicker]:
     return [ReportTicker.metal(sym) for sym in PINNED_METALS]
+
+
+def pinned_commodity_tickers() -> list[ReportTicker]:
+    return [ReportTicker.commodity(sym) for sym in PINNED_COMMODITIES]
 
 
 class Verdict(BaseModel):

@@ -27,6 +27,20 @@ class RealYieldPoint(BaseModel):
     asof: date
 
 
+RateSource = Literal["fed", "riksbank"]
+
+
+class RatePoint(BaseModel):
+    """A central bank's current policy rate (USA Fed funds / Sweden Riksbank)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    value: float
+    previous: float | None
+    asof: date
+    source: RateSource
+
+
 class EventAnalysis(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -165,6 +179,11 @@ class Signal(BaseModel):
 # quantum, …) supply their own, so this stays an open string rather than a Literal.
 NewsSource = str
 
+# "confirmed" only when a real <pubDate>/ISO date parsed successfully; every fallback
+# path (URL-date stagger, feed build time, fetch time) is "approximate" — the UI must
+# not present a guessed timestamp with the same confidence as a real one.
+NewsTimeConfidence = Literal["confirmed", "approximate"]
+
 
 class NewsItem(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -173,6 +192,7 @@ class NewsItem(BaseModel):
     title: str
     url: str
     published: datetime
+    time_confidence: NewsTimeConfidence = "confirmed"
 
     @field_validator("published")
     @classmethod
@@ -214,6 +234,38 @@ class CommodityQuote(BaseModel):
         if self.previous_close == 0.0:
             return 0.0
         return (self.price - self.previous_close) / self.previous_close * 100.0
+
+
+IndexSymbol = Literal["DAX", "CAC40", "FTSE100", "NIKKEI225"]
+
+
+class IndexPoint(BaseModel):
+    """A national equity index's current level (DAX/CAC 40/FTSE 100/Nikkei 225)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    symbol: IndexSymbol
+    level: float
+    previous_close: float
+    session_open: bool
+    time: datetime
+
+    @field_validator("level", "previous_close")
+    @classmethod
+    def _positive(cls, v: float) -> float:
+        if v <= 0.0:
+            raise ValueError(f"index level must be positive: {v}")
+        return v
+
+    @property
+    def change(self) -> float:
+        return self.level - self.previous_close
+
+    @property
+    def change_percent(self) -> float:
+        if self.previous_close == 0.0:
+            return 0.0
+        return (self.level - self.previous_close) / self.previous_close * 100.0
 
 
 Party = Literal["R", "D", "I"]
@@ -384,3 +436,14 @@ class StockQuote(BaseModel):
         if self.previous_close == 0.0:
             return 0.0
         return (self.price - self.previous_close) / self.previous_close * 100.0
+
+
+class DividendInfo(BaseModel):
+    """A stock's most recent dividend payment (historical only — no forward-looking source)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ticker: str
+    amount: float | None = None
+    payment_date: date | None = None
+    is_forward_looking: bool = False

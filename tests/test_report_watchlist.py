@@ -162,6 +162,11 @@ async def test_generating_spinner_rows_then_cleared() -> None:
         await pilot.pause()
         assert len(app.screen.query("#spin-XAU")) == 0  # swapped to result
         assert len(app.screen.query("#spin-XAG")) == 1  # still generating
+        labels = [
+            str(label.render()) for label in app.screen.query(".report-recent-label")
+        ]
+        assert any("Gold" in text for text in labels)
+        assert not any("XAU" in text for text in labels)
 
 
 async def test_failed_run_shows_retry_and_fires_callback() -> None:

@@ -96,13 +96,18 @@ MetalPanel > .change-row {
     height: 1;
 }
 
+MetalPanel > .indicator-detail {
+    height: auto;
+    margin-top: 1;
+}
+
 #macro-strip {
     layout: horizontal;
     height: 1;
     padding: 0 2;
 }
 
-.fx-tile, .commodity-tile, .ratio-tile, .yield-tile {
+.fx-tile, .commodity-tile, .ratio-tile, .yield-tile, .rate-tile, .index-tile {
     width: 1fr;
     height: 1;
     content-align: left middle;
@@ -971,6 +976,97 @@ CalendarEventScreen {
 
 #cal-event-close {
     width: 18;
+}
+
+NewsLogScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+#news-log-dialog {
+    width: 100;
+    height: 80%;
+    padding: 1 2;
+    background: #14141c;
+    border: round #8ab4ff;
+    layout: vertical;
+}
+
+#news-log-title {
+    width: 100%;
+    height: auto;
+    color: #e8e8f0;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#news-log-body {
+    width: 100%;
+    height: 1fr;
+}
+
+#news-log-close {
+    width: 18;
+    margin-top: 1;
+}
+
+StockChartScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+#stock-chart-dialog {
+    width: 100;
+    height: auto;
+    padding: 1 2;
+    background: #14141c;
+    border: round #8ab4ff;
+    layout: vertical;
+}
+
+#stock-chart-dialog PriceChart {
+    height: 30;
+}
+
+#stock-chart-title {
+    width: 100%;
+    height: auto;
+    color: #e8e8f0;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#stock-chart-error {
+    width: 100%;
+    height: auto;
+    color: #ff9b6b;
+    margin-bottom: 1;
+}
+
+.daily-change-strip {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+}
+
+#stock-chart-report {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+    color: #ffd56b;
+}
+
+#stock-chart-dividend {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+    color: #c0c0d0;
+}
+
+#stock-chart-open-report,
+#stock-chart-close {
+    width: 24;
+    margin-top: 1;
 }
 
 PlotSettingsScreen .sub-label {

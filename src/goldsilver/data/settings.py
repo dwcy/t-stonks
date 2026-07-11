@@ -85,6 +85,12 @@ ALLOWED_MINI_TILES: tuple[str, ...] = (
     "RATIO",
     "DXY",
     "REALYIELD",
+    "FEDRATE",
+    "RIKSRATE",
+    "DAX",
+    "CAC40",
+    "FTSE100",
+    "NIKKEI225",
 )
 
 

@@ -15,6 +15,7 @@ from goldsilver.reports.models import (
     ReportRun,
     ReportStatus,
     ReportTicker,
+    pinned_commodity_tickers,
     pinned_metal_tickers,
 )
 from goldsilver.reports.prompt_builder import AnalysisPromptContext, build_prompt
@@ -50,7 +51,7 @@ class ReportService:
         stocks = [
             ReportTicker.stock(sym) for sym in self._settings_provider().report_tickers
         ]
-        return pinned_metal_tickers() + stocks
+        return pinned_metal_tickers() + pinned_commodity_tickers() + stocks
 
     def effective_watchlist(self) -> list[ReportTicker]:
         excluded = set(self._settings_provider().report_excluded)

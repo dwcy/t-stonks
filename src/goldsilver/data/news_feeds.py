@@ -74,10 +74,6 @@ NEWS_FEEDS: tuple[FeedEntry, ...] = (
         "https://www.whitehouse.gov/news/feed/",
     ),
     (
-        "PressTV",
-        "https://www.presstv.ir/rss.xml",
-    ),
-    (
         "IRNA",
         "https://en.irna.ir/rss",
     ),

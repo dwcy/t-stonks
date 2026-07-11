@@ -6,10 +6,15 @@ from typing import Final
 
 
 PINNED_METALS: Final[tuple[str, ...]] = ("XAU", "XAG")
+PINNED_COMMODITIES: Final[tuple[str, ...]] = ("BRENT", "COPPER")
 
+# Despite the name, this also covers the pinned commodities (report titles/labels
+# use one shared symbol->readable-name lookup regardless of instrument kind).
 METAL_LABELS: Final[dict[str, str]] = {
     "XAU": "Gold",
     "XAG": "Silver",
+    "BRENT": "Oil",
+    "COPPER": "Copper",
 }
 
 DEFAULT_ALLOWED_TOOLS: Final[tuple[str, ...]] = ("WebSearch", "WebFetch", "Read")

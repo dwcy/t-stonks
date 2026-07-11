@@ -37,3 +37,62 @@ Screen {
 #news-panel {
     height: auto;
 }
+
+StockChartScreen {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+#stock-chart-dialog {
+    width: 100;
+    height: auto;
+    padding: 1 2;
+    background: #14141c;
+    border: round #8ab4ff;
+    layout: vertical;
+}
+
+#stock-chart-dialog PriceChart {
+    height: 30;
+}
+
+#stock-chart-title {
+    width: 100%;
+    height: auto;
+    color: #e8e8f0;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#stock-chart-error {
+    width: 100%;
+    height: auto;
+    color: #ff9b6b;
+    margin-bottom: 1;
+}
+
+.daily-change-strip {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+}
+
+#stock-chart-report {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+    color: #ffd56b;
+}
+
+#stock-chart-dividend {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+    color: #c0c0d0;
+}
+
+#stock-chart-open-report,
+#stock-chart-close {
+    width: 24;
+    margin-top: 1;
+}

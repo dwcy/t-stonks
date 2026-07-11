@@ -5,11 +5,11 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
 import httpx
-import yfinance as yf
 from pydantic import ValidationError
 
 from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import CommodityQuote, CommoditySymbol
+from goldsilver.data.yf_daily import fetch_daily_close_pair
 
 
 CommodityHandler = Callable[[CommodityQuote], Awaitable[None] | None]
@@ -27,6 +27,49 @@ _ALL_SYMBOLS: tuple[CommoditySymbol, ...] = ("BRENT", "COPPER", "BTC", "DXY")
 # matches the Avanza app — COMEX HG=F is USD/lb and mismatches by the unit factor.
 AVANZA_INSTRUMENT_URL = "https://www.avanza.se/_api/market-guide/stock/{orderbook_id}"
 AVANZA_COPPER_ORDERBOOK = "18989"
+
+
+async def fetch_commodity_quote(symbol: CommoditySymbol) -> CommodityQuote | None:
+    """One-shot fetch for a single commodity — reused by the poller and by the
+    report engine's reference-quote lookup (reports/reference_quote.py)."""
+    if symbol == "COPPER":
+        return await _fetch_copper_avanza()
+    yf_symbol = _YF_SYMBOL[symbol]
+    pair = await asyncio.to_thread(fetch_daily_close_pair, yf_symbol)
+    if pair is None:
+        return None
+    price, previous_close, last_ts = pair
+    try:
+        return CommodityQuote(
+            symbol=symbol,
+            price=price,
+            previous_close=previous_close,
+            time=last_ts,
+        )
+    except ValidationError:
+        return None
+
+
+async def _fetch_copper_avanza() -> CommodityQuote | None:
+    url = AVANZA_INSTRUMENT_URL.format(orderbook_id=AVANZA_COPPER_ORDERBOOK)
+    try:
+        async with make_client(timeout=10.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            payload = response.json()
+        price = float(payload["quote"]["last"])
+        previous_close = float(payload["historicalClosingPrices"]["oneDay"])
+    except (httpx.HTTPError, KeyError, ValueError, TypeError):
+        return None
+    try:
+        return CommodityQuote(
+            symbol="COPPER",
+            price=price,
+            previous_close=previous_close,
+            time=datetime.now(timezone.utc),
+        )
+    except ValidationError:
+        return None
 
 
 class CommodityService:
@@ -86,55 +129,7 @@ class CommodityService:
                 await self._emit_stale(symbol)
 
     async def _fetch(self, symbol: CommoditySymbol) -> CommodityQuote | None:
-        if symbol == "COPPER":
-            return await self._fetch_copper_avanza()
-        yf_symbol = _YF_SYMBOL[symbol]
-
-        def _sync() -> CommodityQuote | None:
-            try:
-                df = yf.Ticker(yf_symbol).history(period="5d", interval="1d")
-            except Exception:
-                return None
-            if df is None or len(df) < 2:
-                return None
-            closes = [float(c) for c in df["Close"].tolist() if c == c]
-            if len(closes) < 2:
-                return None
-            last_ts = df.index[-1].to_pydatetime()
-            if last_ts.tzinfo is None:
-                last_ts = last_ts.replace(tzinfo=timezone.utc)
-            try:
-                return CommodityQuote(
-                    symbol=symbol,
-                    price=closes[-1],
-                    previous_close=closes[-2],
-                    time=last_ts.astimezone(timezone.utc),
-                )
-            except ValidationError:
-                return None
-
-        return await asyncio.to_thread(_sync)
-
-    async def _fetch_copper_avanza(self) -> CommodityQuote | None:
-        url = AVANZA_INSTRUMENT_URL.format(orderbook_id=AVANZA_COPPER_ORDERBOOK)
-        try:
-            async with make_client(timeout=10.0) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                payload = response.json()
-            price = float(payload["quote"]["last"])
-            previous_close = float(payload["historicalClosingPrices"]["oneDay"])
-        except (httpx.HTTPError, KeyError, ValueError, TypeError):
-            return None
-        try:
-            return CommodityQuote(
-                symbol="COPPER",
-                price=price,
-                previous_close=previous_close,
-                time=datetime.now(timezone.utc),
-            )
-        except ValidationError:
-            return None
+        return await fetch_commodity_quote(symbol)
 
     async def _emit(self, quote: CommodityQuote) -> None:
         if self._handler is None:

@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 import yfinance as yf
 from pydantic import ValidationError
 
-from marketcore.models_macro import StockQuote
+from marketcore.models import Bar
+from marketcore.models_macro import DividendInfo, StockQuote
 from marketcore.services.base import PollingService
 
 StockHandler = Callable[[list[StockQuote]], Awaitable[None] | None]
@@ -176,3 +177,72 @@ def fetch_single_quote(sym: str) -> StockQuote | None:
         )
     except ValidationError:
         return None
+
+
+def fetch_daily_history(sym: str, *, period: str = "3mo") -> list[Bar]:
+    """Daily OHLCV bars for the chart-detail modal (Story 9) — one-shot, not polled."""
+    try:
+        df = yf.Ticker(sym).history(period=period, interval="1d")
+    except Exception:
+        return []
+    if df is None or len(df) == 0:
+        return []
+    bars: list[Bar] = []
+    for ts, row in df.iterrows():
+        t = ts.to_pydatetime()
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        try:
+            o, h, low, c, v = (
+                float(row["Open"]),
+                float(row["High"]),
+                float(row["Low"]),
+                float(row["Close"]),
+                float(row["Volume"]),
+            )
+        except (ValueError, KeyError):
+            continue
+        # yfinance's still-forming "today" row often has NaN OHLC — a NaN bar
+        # breaks the chart's y-axis range calc (min/max over NaN), leaving the
+        # whole chart blank. Skip it rather than pass it through.
+        if o != o or h != h or low != low or c != c or v != v:
+            continue
+        try:
+            bars.append(
+                Bar(
+                    symbol=sym,
+                    time=t.astimezone(timezone.utc),
+                    open=o,
+                    high=h,
+                    low=low,
+                    close=c,
+                    volume=v,
+                )
+            )
+        except ValidationError:
+            continue
+    return bars
+
+
+def fetch_dividend_info(sym: str) -> DividendInfo:
+    """Most recent dividend payment for `sym`, if any — historical only, no
+    forward-looking source (yfinance's forward calendar is unreliable across
+    tickers, so this deliberately doesn't attempt to parse it)."""
+    try:
+        series = yf.Ticker(sym).dividends
+    except Exception:
+        series = None
+    if series is None or len(series) == 0:
+        return DividendInfo(ticker=sym)
+    try:
+        last_ts = series.index[-1]
+        amount = float(series.iloc[-1])
+    except (IndexError, ValueError, TypeError):
+        return DividendInfo(ticker=sym)
+    payment_date = last_ts.date() if hasattr(last_ts, "date") else None
+    return DividendInfo(
+        ticker=sym,
+        amount=amount,
+        payment_date=payment_date,
+        is_forward_looking=False,
+    )

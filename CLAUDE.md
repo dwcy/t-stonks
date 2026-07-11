@@ -55,27 +55,40 @@ on it. `marketcore` must never import an app package (guarded by
 ```
 src/
   marketcore/          # shared lower layer (imported by every app)
-    models.py          # Tick, Bar
-    models_macro.py    # FX/commodity/stock/news/calendar/social models
+    models.py          # Tick, Bar, DailyChange
+    models_macro.py    # FX/commodity/index/rate/stock/dividend/news/calendar/social models
     http.py            # make_client() httpx factory
     session.py         # tz-parameterized now/date/midnight helpers
     paths.py           # config_base(app_name) + per-app settings/trades/reports paths
     fsutil.py          # atomic_write_text()
     services/
       base.py          # PollingService — shared start/stop/refresh loop
-      stock_service.py # StockService (yfinance), register_names()
-      news_service.py  # NewsService(feeds=...) — RSS feed list injected
+      stock_service.py # StockService, fetch_daily_history(), fetch_dividend_info() (yfinance)
+      news_service.py  # NewsService(feeds=...) — RSS feed list injected, time_confidence + history()
     widgets/
-      chart.py         # PriceChart (plotext)
-      stock_tile.py    # StockTile live quote + sparkline
-      format.py        # color palette + format_age()
+      chart.py               # PriceChart (plotext)
+      stock_tile.py           # StockTile live quote + sparkline; click opens StockChartScreen
+      stock_chart_screen.py   # full detail chart + 40-day strip + report/dividend sections modal
+      daily_change_strip.py   # compute_daily_changes() + the 40-day up/down strip widget
+      format.py               # color palette + format_age()
   goldsilver/          # gold & silver app (re-points to marketcore via facades)
     app.py             # GoldSilverApp + main()
+    report_controller.py  # report UI + watchlist/next-run/latest-run lookups for the chart modal
     data/
-      service.py       # MetalsService — goldprice.org + Avanza hybrid (metal-specific)
-      news_feeds.py    # goldsilver's RSS feed list, injected into NewsService
-      settings.py      # AppSettings; paths via marketcore.paths("goldsilver")
-    widgets/metal_panel.py
+      service.py         # MetalsService — goldprice.org + Avanza hybrid (metal-specific)
+      news_feeds.py       # goldsilver's RSS feed list, injected into NewsService
+      settings.py         # AppSettings; paths via marketcore.paths("goldsilver")
+      fred.py             # shared FRED fetch/parse (real-yield + Fed funds rate + calendar key lookup)
+      riksbank_client.py  # Sweden policy rate via api.riksbank.se (no key required)
+      rates_service.py    # RateService — FEDRATE (FRED DFF) / RIKSRATE mini-tiles
+      index_service.py    # IndexService — DAX/CAC40/FTSE100/NIKKEI225 mini-tiles
+      yf_daily.py          # shared "last two daily closes" yfinance fetch (commodity + index)
+      signal_strategy_info.py  # indicator descriptions + priority rank (click-to-reveal)
+    widgets/
+      metal_panel.py       # >400-LoC-adjacent; see note below
+      news_log_screen.py   # rolling news history modal
+      rate_tile.py          # FEDRATE/RIKSRATE mini-tile
+      index_tile.py          # DAX/CAC40/FTSE100/NIKKEI225 mini-tile
     styles/app.tcss
   quantum/             # quantum ETFs + pure-play stocks + news app
     app.py             # QuantumApp + main()
@@ -87,6 +100,11 @@ src/
 pyproject.toml
 uv.lock
 ```
+
+`goldsilver/widgets/metal_panel.py` is at 38 methods on one class (`MetalPanel`) — pre-existing
+debt that predates feature 005, past this repo's own 15-method concern-separation trigger.
+Not split as part of 005 (would have been unrelated scope); worth a dedicated pass to extract
+a collaborator (e.g. an indicator-rendering helper) if it grows further.
 
 Older `goldsilver` modules (fx/commodity/futures/calendar/congress/insider/yields
 services, strategy/trade/report engines) still live under `goldsilver/` and import the
@@ -124,5 +142,5 @@ Each app stores settings under its own OS config dir (`%APPDATA%/<app>` /
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/004-shared-core-quantum-app/plan.md`.
+at `specs/005-dashboard-ux-fixes/plan.md`.
 <!-- SPECKIT END -->

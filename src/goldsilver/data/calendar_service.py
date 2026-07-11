@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
@@ -15,8 +14,9 @@ from goldsilver.data.calendar_actuals import (
     merge_event,
     same_day_titles,
 )
-from goldsilver.data.calendar_actuals_store import CalendarActualsStore
+from goldsilver.data.calendar_actuals_store import CalendarActualsStore, event_key
 from goldsilver.data.calendar_static import load_static_events, window_around
+from goldsilver.data.fred import fred_api_key
 from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import (
     CalendarDay,
@@ -32,9 +32,10 @@ if TYPE_CHECKING:
 
 CalendarHandler = Callable[[CalendarSnapshot], Awaitable[None] | None]
 CalendarSettingsProvider = Callable[[], "CalendarSettings"]
+FetchStartedHandler = Callable[[str], None]
+FetchFinishedHandler = Callable[[str, bool], None]
 
 FRED_URL = "https://api.stlouisfed.org/fred/releases/dates"
-FRED_KEY_ENV = "GOLDSILVER_FRED_KEY"
 CALENDAR_REFRESH_INTERVAL_S = 600.0
 ACTUALS_CHECK_INTERVAL_S = 60.0
 _HIGH_IMPORTANCE_RELEASES = frozenset(
@@ -69,14 +70,16 @@ class CalendarService:
         fred_key: str | None = None,
         actuals_settings_provider: CalendarSettingsProvider | None = None,
         actuals_store: CalendarActualsStore | None = None,
+        on_fetch_started: FetchStartedHandler | None = None,
+        on_fetch_finished: FetchFinishedHandler | None = None,
     ) -> None:
         self._handler = handler
         self._refresh_interval_s = refresh_interval_s
-        self._fred_key = (
-            fred_key if fred_key is not None else os.environ.get(FRED_KEY_ENV)
-        )
+        self._fred_key = fred_key if fred_key is not None else fred_api_key()
         self._actuals_provider = actuals_settings_provider
         self._actuals_store = actuals_store or CalendarActualsStore()
+        self._on_fetch_started = on_fetch_started
+        self._on_fetch_finished = on_fetch_finished
         self._task: asyncio.Task[None] | None = None
         self._actuals_task: asyncio.Task[None] | None = None
         self._actuals_fetcher: ActualsFetcher | None = None
@@ -289,7 +292,10 @@ class CalendarService:
         if not pending:
             return
         results = await asyncio.gather(
-            *(fetcher.fetch(e, same_day_titles(snapshot, e)) for e in pending),
+            *(
+                self._fetch_and_notify(fetcher, e, same_day_titles(snapshot, e))
+                for e in pending
+            ),
             return_exceptions=True,
         )
         updated = [r for r in results if isinstance(r, CalendarEvent)]
@@ -301,3 +307,21 @@ class CalendarService:
             merged = merge_event(merged, event)
         self._last_snapshot = merged
         await self._emit(merged)
+
+    async def _fetch_and_notify(
+        self,
+        fetcher: ActualsFetcher,
+        event: CalendarEvent,
+        same_day_events: tuple[str, ...],
+    ) -> CalendarEvent | None:
+        key = event_key(event)
+        if self._on_fetch_started is not None:
+            self._on_fetch_started(key)
+        ok = False
+        try:
+            result = await fetcher.fetch(event, same_day_events)
+            ok = result is not None
+            return result
+        finally:
+            if self._on_fetch_finished is not None:
+                self._on_fetch_finished(key, ok)

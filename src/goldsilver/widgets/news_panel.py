@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import webbrowser
 from datetime import datetime, timezone
 
+from rich.style import Style
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
 from textual.reactive import reactive
@@ -12,7 +15,7 @@ from goldsilver.data.models_macro import NewsItem
 from goldsilver.widgets.format import format_age
 
 
-_SOURCE_STYLE = {
+SOURCE_STYLE = {
     "REUTERS": "#ff6b6b",
     "BLOOMBERG": "#ff9b6b",
     "POLITICO": "#ffaa5a",
@@ -31,10 +34,46 @@ _SOURCE_STYLE = {
     "TT": "#fecc00",
     "TRUMP": "#bb9af7",
     "WHITEHOUSE": "#e0e0e8",
-    "PressTV": "#4caf50",
     "IRNA": "#66bb6a",
     "MEHR": "#81c784",
 }
+
+
+def _has_openable_url(item: NewsItem) -> bool:
+    return item.url.startswith(("http://", "https://"))
+
+
+def render_news_row(text: Text, item: NewsItem, now: datetime) -> None:
+    """Append one item's row (time · age · source · title) to a news `Text` block.
+
+    The title span carries a "news_url" meta tag so a click can open the article —
+    see NewsPanel.on_click / NewsLogScreen (same pattern as calendar_panel.py).
+    """
+    local = item.published.astimezone()
+    delta = now - item.published
+    age = format_age(int(delta.total_seconds()))
+    time_str = local.strftime("%H:%M")
+    if item.time_confidence == "approximate":
+        time_str = f"~{time_str}"
+    source_style = SOURCE_STYLE.get(item.source, "#7a7a8a")
+    text.append(f"{time_str} ", style="#7a7a8a")
+    text.append(f"{age:>7} ", style="dim #5a5a6a")
+    text.append(f"{item.source:<11} ", style=source_style)
+    title_start = len(text)
+    text.append(f"{item.title}\n", style="#e0e0e8")
+    if _has_openable_url(item):
+        text.stylize(Style(meta={"news_url": item.url}), title_start, len(text) - 1)
+
+
+class NewsBody(Static):
+    """A news text block that opens the URL carried in the clicked span's meta."""
+
+    def on_click(self, event: events.Click) -> None:
+        style = event.style
+        url = style.meta.get("news_url") if style is not None else None
+        if url:
+            webbrowser.open(url)
+            event.stop()
 
 
 class NewsPanel(VerticalScroll):
@@ -57,7 +96,7 @@ class NewsPanel(VerticalScroll):
         self._by_source: dict[str, list[NewsItem]] = {}
 
     def compose(self) -> ComposeResult:
-        yield Static("loading…", id="news-body")
+        yield NewsBody("loading…", id="news-body")
 
     def replace_items(self, items: list[NewsItem]) -> None:
         self._by_source.clear()
@@ -91,7 +130,7 @@ class NewsPanel(VerticalScroll):
         self._redraw()
 
     def _redraw(self) -> None:
-        body = self.query_one("#news-body", Static)
+        body = self.query_one("#news-body", NewsBody)
         if not self.items:
             body.update(Text("loading…", style="#7a7a8a"))
             self.border_subtitle = ""
@@ -99,21 +138,10 @@ class NewsPanel(VerticalScroll):
         text = Text()
         now = datetime.now(timezone.utc)
         for item in self.items:
-            self._render_item(text, item, now)
+            render_news_row(text, item, now)
         body.update(text)
         latest = max(i.published for i in self.items)
         marker = f"latest {latest.astimezone().strftime('%H:%M')}"
         if self.stale_since is not None:
             marker = f"stale since {self.stale_since.astimezone().strftime('%H:%M')}"
         self.border_subtitle = marker
-
-    def _render_item(self, text: Text, item: NewsItem, now: datetime) -> None:
-        local = item.published.astimezone()
-        delta = now - item.published
-        age = format_age(int(delta.total_seconds()))
-        time_str = local.strftime("%H:%M")
-        source_style = _SOURCE_STYLE.get(item.source, "#7a7a8a")
-        text.append(f"{time_str} ", style="#7a7a8a")
-        text.append(f"{age:>7} ", style="dim #5a5a6a")
-        text.append(f"{item.source:<11} ", style=source_style)
-        text.append(f"{item.title}\n", style="#e0e0e8")

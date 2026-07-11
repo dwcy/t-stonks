@@ -11,7 +11,12 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Switch
 
 from goldsilver.data.settings import ReportSettings
-from goldsilver.reports.constants import METAL_LABELS, PINNED_METALS, safe_name
+from goldsilver.reports.constants import (
+    METAL_LABELS,
+    PINNED_COMMODITIES,
+    PINNED_METALS,
+    safe_name,
+)
 from goldsilver.reports.models import ReportRun, ReportStatus
 from goldsilver.reports.verdict_tracker import TickerAccuracy
 
@@ -96,8 +101,10 @@ class ReportWatchlistScreen(ModalScreen[None]):
                 yield Button("Close", id="report-close")
 
     def _watchlist_entries(self) -> list[tuple[str, bool]]:
-        """(symbol, is_metal) for every row — metals first, then user stocks."""
-        return [(sym, True) for sym in PINNED_METALS] + [
+        """(symbol, pinned) for every row — pinned metals/commodities first, then
+        user-added stocks."""
+        pinned = PINNED_METALS + PINNED_COMMODITIES
+        return [(sym, True) for sym in pinned] + [
             (sym, False) for sym in self._settings.report_tickers
         ]
 
@@ -110,8 +117,8 @@ class ReportWatchlistScreen(ModalScreen[None]):
     def _build_ticker_rows(self) -> list[Horizontal]:
         rows: list[Horizontal] = []
         excluded = set(self._settings.report_excluded)
-        for sym, is_metal in self._watchlist_entries():
-            label = f"{METAL_LABELS.get(sym, sym)} ({sym})" if is_metal else sym
+        for sym, pinned in self._watchlist_entries():
+            label = f"{METAL_LABELS.get(sym, sym)} ({sym})" if pinned else sym
             children: list = [
                 Switch(
                     value=sym not in excluded,
@@ -121,7 +128,7 @@ class ReportWatchlistScreen(ModalScreen[None]):
                 Label(label, classes="report-ticker-label"),
                 Button("▶ Generate", id=f"gen-{safe_name(sym)}", classes="report-gen"),
             ]
-            if not is_metal:
+            if not pinned:
                 children.append(
                     Button("✕", id=f"rm-{safe_name(sym)}", classes="report-remove")
                 )
@@ -265,7 +272,8 @@ class ReportWatchlistScreen(ModalScreen[None]):
             tag = "—"
         else:
             tag = run.status.value
-        return f"{when}  {run.ticker:<8}  {tag}"
+        name = METAL_LABELS.get(run.ticker, run.ticker)
+        return f"{when}  {name:<8}  {tag}"
 
     def _refresh_tickers(self) -> None:
         container = self.query_one("#report-ticker-list", Vertical)
@@ -274,7 +282,12 @@ class ReportWatchlistScreen(ModalScreen[None]):
 
     def _add_ticker(self, raw: str) -> None:
         sym = raw.strip().upper()
-        if not sym or sym in self._settings.report_tickers or sym in PINNED_METALS:
+        if (
+            not sym
+            or sym in self._settings.report_tickers
+            or sym in PINNED_METALS
+            or sym in PINNED_COMMODITIES
+        ):
             return
         self._settings.report_tickers.append(sym)
         self._refresh_tickers()

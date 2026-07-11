@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from datetime import datetime
 
 from textual.app import App, ComposeResult
@@ -12,11 +13,17 @@ from textual.widgets import Footer, Header, Label
 
 from marketcore.models_macro import NewsItem, StockQuote
 from marketcore.services.news_service import NewsService
-from marketcore.services.stock_service import StockService, register_names
+from marketcore.services.stock_service import (
+    StockService,
+    fetch_daily_history,
+    fetch_dividend_info,
+    register_names,
+)
+from marketcore.widgets.stock_chart_screen import StockChartScreen
 from marketcore.widgets.stock_tile import StockTile
 
 from quantum.data.news_feeds import QUANTUM_NEWS_FEEDS
-from quantum.data.presets import NAME_OVERRIDES
+from quantum.data.presets import ACCENT_PRESETS, NAME_OVERRIDES
 from quantum.data.settings import QuantumSettings
 
 
@@ -38,6 +45,7 @@ class QuantumApp(App[None]):
 
         self._tiles: dict[str, StockTile] = {}
         self._news_panel_ready = False
+        self._stock_chart_screen: StockChartScreen | None = None
 
         tickers = [*self._settings.etf_tickers, *self._settings.stock_tickers]
         self._stock_service = StockService(
@@ -60,14 +68,14 @@ class QuantumApp(App[None]):
             yield Label("Quantum ETFs", classes="section-title")
             with Horizontal(id="etf-row"):
                 for ticker in self._settings.etf_tickers:
-                    tile = StockTile(ticker)
+                    tile = StockTile(ticker, on_chart_requested=self._show_stock_chart)
                     tile.add_class("etf-tile")
                     self._tiles[ticker] = tile
                     yield tile
             yield Label("Pure-play quantum stocks", classes="section-title")
             with Horizontal(id="stock-row"):
                 for ticker in self._settings.stock_tickers:
-                    tile = StockTile(ticker)
+                    tile = StockTile(ticker, on_chart_requested=self._show_stock_chart)
                     self._tiles[ticker] = tile
                     yield tile
             if self._settings.news_enabled:
@@ -123,6 +131,40 @@ class QuantumApp(App[None]):
         await self._stock_service.refresh_now()
         if self._news_service is not None:
             await self._news_service.refresh_now()
+
+    def _show_stock_chart(self, ticker: str) -> None:
+        self.run_worker(
+            self._load_stock_chart(ticker), exclusive=False, group="stock-chart"
+        )
+
+    async def _load_stock_chart(self, ticker: str) -> None:
+        bars, dividend = await asyncio.gather(
+            asyncio.to_thread(fetch_daily_history, ticker),
+            asyncio.to_thread(fetch_dividend_info, ticker),
+        )
+        screen = StockChartScreen(
+            ticker,
+            bars,
+            dividend=dividend,
+            accent_color=ACCENT_PRESETS[self._settings.accent_color_name],
+            on_retry=lambda: self._retry_stock_chart(ticker),
+        )
+        self._stock_chart_screen = screen
+        self.push_screen(screen, self._on_stock_chart_closed)
+
+    def _on_stock_chart_closed(self, _result: None) -> None:
+        self._stock_chart_screen = None
+
+    def _retry_stock_chart(self, ticker: str) -> None:
+        self.run_worker(
+            self._reload_stock_chart(ticker), exclusive=False, group="stock-chart"
+        )
+
+    async def _reload_stock_chart(self, ticker: str) -> None:
+        bars = await asyncio.to_thread(fetch_daily_history, ticker)
+        screen = self._stock_chart_screen
+        if screen is not None and self.screen is screen:
+            screen.apply_bars(bars)
 
 
 def main() -> None:

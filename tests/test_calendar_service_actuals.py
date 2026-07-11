@@ -190,6 +190,33 @@ async def test_check_due_passes_same_day_sibling_into_prompt(
 
 
 @pytest.mark.asyncio
+async def test_check_due_fires_started_and_finished_callbacks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    async def fake_run_claude(*_args: object, **_kwargs: object) -> ClaudeResult:
+        return ClaudeResult(status=ReportStatus.SUCCESS, html=_SAMPLE)
+
+    monkeypatch.setattr(calendar_actuals, "run_claude", fake_run_claude)
+    monkeypatch.setattr(calendar_service, "find_claude", lambda: "claude")
+
+    started: list[str] = []
+    finished: list[tuple[str, bool]] = []
+
+    service = CalendarService(
+        actuals_settings_provider=lambda: CalendarSettings(actuals_enabled=True),
+        actuals_store=CalendarActualsStore(tmp_path / "actuals.json"),
+        on_fetch_started=started.append,
+        on_fetch_finished=lambda key, ok: finished.append((key, ok)),
+    )
+    service._last_snapshot = _snapshot_with_passed_high()
+
+    await service._check_due()
+
+    assert len(started) == 1
+    assert finished == [(started[0], True)]
+
+
+@pytest.mark.asyncio
 async def test_check_due_disabled_does_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

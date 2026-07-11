@@ -15,7 +15,7 @@ def test_effective_watchlist_filters_excluded() -> None:
 
     symbols = [t.symbol for t in service.effective_watchlist()]
 
-    assert symbols == ["XAU", "LUG.ST"]
+    assert symbols == ["XAU", "BRENT", "COPPER", "LUG.ST"]
 
 
 def test_full_watchlist_ignores_exclusions() -> None:
@@ -24,7 +24,7 @@ def test_full_watchlist_ignores_exclusions() -> None:
 
     symbols = [t.symbol for t in service.full_watchlist()]
 
-    assert symbols == ["XAU", "XAG", "NVDA"]
+    assert symbols == ["XAU", "XAG", "BRENT", "COPPER", "NVDA"]
 
 
 def test_resolve_tickers_keeps_metal_kind_even_when_excluded() -> None:
@@ -35,3 +35,17 @@ def test_resolve_tickers_keeps_metal_kind_even_when_excluded() -> None:
 
     assert ticker.kind == "metal"
     assert ticker.label == "Gold"
+
+
+def test_copper_and_oil_are_pinned_with_readable_labels() -> None:
+    settings = ReportSettings(report_tickers=[])
+    service = ReportService(lambda: settings)
+
+    by_symbol = {t.symbol: t for t in service.full_watchlist()}
+
+    assert by_symbol["COPPER"].kind == "commodity"
+    assert by_symbol["COPPER"].pinned is True
+    assert by_symbol["COPPER"].label == "Copper"
+    assert by_symbol["BRENT"].kind == "commodity"
+    assert by_symbol["BRENT"].pinned is True
+    assert by_symbol["BRENT"].label == "Oil"

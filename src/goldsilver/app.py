@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -42,8 +43,12 @@ from goldsilver.data.models_macro import (
     FxPair,
     FxRate,
     InsiderTrade,
+    IndexPoint,
+    IndexSymbol,
     NewsItem,
     OmxSnapshot,
+    RatePoint,
+    RateSource,
     RealYieldPoint,
     Signal,
     StockQuote,
@@ -52,6 +57,7 @@ from goldsilver.data.models_macro import (
 from goldsilver.data.models_futures import FuturesSnapshot
 from goldsilver.data.settings import AppSettings
 from goldsilver.data.stock_presets import extra_row_tickers
+from goldsilver.data.stock_service import fetch_daily_history, fetch_dividend_info
 from goldsilver.data.signal_strategies import (
     SignalStrategy,
     STRATEGY_REGISTRY,
@@ -65,6 +71,8 @@ from goldsilver.settings_sync import apply_settings_change
 from goldsilver.data.alerts import PriceAlertEngine
 from goldsilver.data.session import stockholm_midnight_utc, stockholm_now
 from goldsilver.data.trading_hours import to_local as _to_stockholm
+from goldsilver.data.index_service import IndexService
+from goldsilver.data.rates_service import RateService
 from goldsilver.data.trades_service import TradesService
 from goldsilver.data.yields_service import RealYieldService
 from goldsilver.widgets import (
@@ -77,14 +85,18 @@ from goldsilver.widgets import (
     EditMathScreen,
     FuturesStrip,
     FxTile,
+    IndexTile,
     InsiderPanel,
     MetalPanel,
+    NewsLogScreen,
     NewsPanel,
     OmxStrip,
     PlotSettings,
     PlotSettingsScreen,
+    RateTile,
     RatioTile,
     RealYieldTile,
+    StockChartScreen,
     StockRow,
     StockTwitsPanel,
     TradeSimulatorScreen,
@@ -99,6 +111,8 @@ _FX_PAIR_IDS: frozenset[str] = frozenset({"USDSEK", "CADSEK", "EURSEK"})
 _COMMODITY_IDS: frozenset[str] = frozenset({"BRENT", "COPPER", "BTC", "DXY"})
 _RATIO_ID = "RATIO"
 _REAL_YIELD_ID = "REALYIELD"
+_RATE_SOURCE_BY_ID: dict[str, str] = {"FEDRATE": "fed", "RIKSRATE": "riksbank"}
+_INDEX_IDS: frozenset[str] = frozenset({"DAX", "CAC40", "FTSE100", "NIKKEI225"})
 
 TIMEFRAMES: list[tuple[str, str, str, str | None]] = [
     ("today", "2d", "1m", "today"),
@@ -130,6 +144,7 @@ class GoldSilverApp(App[None]):
         Binding("t", "trade_simulator", "Trade Sim"),
         Binding("g", "reports", "Reports"),
         Binding("a", "alerts", "Alerts"),
+        Binding("l", "news_log", "News log"),
         Binding("r", "refresh", "Refresh"),
         Binding("z", "cycle_zoom", "Zoom"),
         Binding("h", "cycle_chart_mode", "Mode"),
@@ -158,6 +173,22 @@ class GoldSilverApp(App[None]):
         self._last_yield_point: RealYieldPoint | None = None
         self._yield_received = False
         self._yields_service = RealYieldService(handler=self._on_real_yield)
+        self._rate_tiles: dict[str, RateTile] = {}
+        self._last_rate_point: dict[str, RatePoint | None] = {}
+        self._rate_received: dict[str, bool] = {}
+        self._fed_rate_service = RateService("fed", handler=self._on_fed_rate)
+        self._riksbank_rate_service = RateService(
+            "riksbank", handler=self._on_riksbank_rate
+        )
+        self._index_tiles: dict[str, IndexTile] = {}
+        self._index_services: dict[str, IndexService] = {
+            symbol: IndexService(
+                cast(IndexSymbol, symbol),
+                handler=self._on_index_point,
+                stale_handler=self._on_index_stale,
+            )
+            for symbol in _INDEX_IDS
+        }
         self._alert_engine = PriceAlertEngine()
         self._calendar_panel: CalendarPanel | None = None
         self._calendar_event_screen: CalendarEventScreen | None = None
@@ -169,6 +200,8 @@ class GoldSilverApp(App[None]):
         self._calendar_service = CalendarService(
             handler=self._on_calendar,
             actuals_settings_provider=lambda: self._settings.calendar,
+            on_fetch_started=self._on_calendar_fetch_started,
+            on_fetch_finished=self._on_calendar_fetch_finished,
         )
         self._fx_service = FxService(
             handler=self._on_fx_rate,
@@ -245,6 +278,7 @@ class GoldSilverApp(App[None]):
             on_enable_changed=self._on_simulator_enabled,
         )
         self._reports = ReportController(self)
+        self._stock_chart_screen: StockChartScreen | None = None
 
     @property
     def _timeframe_label(self) -> str:
@@ -284,12 +318,16 @@ class GoldSilverApp(App[None]):
         self._omx_strip = OmxStrip()
         self._futures_strip = FuturesStrip()
         self._futures_strip.display = s.show_futures
-        self._stock_row = StockRow(list(s.stock_tickers))
+        self._stock_row = StockRow(
+            list(s.stock_tickers), on_chart_requested=self._show_stock_chart
+        )
         self._stock_row.add_class("primary-stocks")
         if not s.show_stock_row or not s.stock_tickers:
             self._stock_row.display = False
         extra_tickers = self._extra_row_tickers()
-        self._extra_stock_row = StockRow(extra_tickers)
+        self._extra_stock_row = StockRow(
+            extra_tickers, on_chart_requested=self._show_stock_chart
+        )
         if not s.show_stock_row or not extra_tickers:
             self._extra_stock_row.display = False
         self._build_metals()
@@ -312,6 +350,8 @@ class GoldSilverApp(App[None]):
         self._commodity_tiles.clear()
         self._ratio_tile = None
         self._yield_tile = None
+        self._rate_tiles.clear()
+        self._index_tiles.clear()
         widgets: list[Static] = []
         for i, tile_id in enumerate(self._settings.mini_tiles):
             if i > 0:
@@ -332,6 +372,16 @@ class GoldSilverApp(App[None]):
             elif tile_id == _REAL_YIELD_ID:
                 self._yield_tile = RealYieldTile()
                 widgets.append(self._yield_tile)
+            elif tile_id in _RATE_SOURCE_BY_ID:
+                source = cast(RateSource, _RATE_SOURCE_BY_ID[tile_id])
+                rate_tile = RateTile(source)
+                self._rate_tiles[tile_id] = rate_tile
+                widgets.append(rate_tile)
+            elif tile_id in _INDEX_IDS:
+                idx_symbol = cast(IndexSymbol, tile_id)
+                idx_tile = IndexTile(idx_symbol)
+                self._index_tiles[tile_id] = idx_tile
+                widgets.append(idx_tile)
         return widgets
 
     def _build_metals(self) -> None:
@@ -418,6 +468,10 @@ class GoldSilverApp(App[None]):
         self._insider_service.start()
         self._stocktwits_service.start()
         self._yields_service.start()
+        self._fed_rate_service.start()
+        self._riksbank_rate_service.start()
+        for index_service in self._index_services.values():
+            index_service.start()
         self._seed_all()
         if self._settings.simulator.enabled:
             self._start_simulator_replay()
@@ -439,6 +493,10 @@ class GoldSilverApp(App[None]):
         await self._insider_service.stop()
         await self._stocktwits_service.stop()
         await self._yields_service.stop()
+        await self._fed_rate_service.stop()
+        await self._riksbank_rate_service.stop()
+        for index_service in self._index_services.values():
+            await index_service.stop()
 
     def _seed_all(self) -> None:
         for symbol in self._panels:
@@ -677,6 +735,14 @@ class GoldSilverApp(App[None]):
         if self._calendar_panel is not None:
             self._calendar_panel.apply_snapshot(snapshot)
 
+    def _on_calendar_fetch_started(self, key: str) -> None:
+        if self._calendar_panel is not None:
+            self._calendar_panel.apply_fetch_started(key)
+
+    def _on_calendar_fetch_finished(self, key: str, ok: bool) -> None:
+        if self._calendar_panel is not None:
+            self._calendar_panel.apply_fetch_finished(key, ok)
+
     def _show_calendar_event(self, event: CalendarEvent) -> None:
         screen = CalendarEventScreen(
             event,
@@ -688,6 +754,49 @@ class GoldSilverApp(App[None]):
 
     def _on_calendar_event_closed(self, _result: None) -> None:
         self._calendar_event_screen = None
+
+    def _show_stock_chart(self, ticker: str) -> None:
+        self.run_worker(
+            self._load_stock_chart(ticker), exclusive=False, group="stock-chart"
+        )
+
+    async def _load_stock_chart(self, ticker: str) -> None:
+        bars, dividend = await asyncio.gather(
+            asyncio.to_thread(fetch_daily_history, ticker),
+            asyncio.to_thread(fetch_dividend_info, ticker),
+        )
+        next_report_at = None
+        latest_report_summary = None
+        latest_report_path = None
+        if self._reports.is_watchlisted(ticker):
+            next_report_at = self._reports.next_run_at()
+            latest_report_summary = self._reports.latest_report_summary_for(ticker)
+            latest_report_path = self._reports.latest_report_uri_for(ticker)
+        screen = StockChartScreen(
+            ticker,
+            bars,
+            next_report_at=next_report_at,
+            latest_report_summary=latest_report_summary,
+            latest_report_path=latest_report_path,
+            dividend=dividend,
+            on_retry=lambda: self._retry_stock_chart(ticker),
+        )
+        self._stock_chart_screen = screen
+        self.push_screen(screen, self._on_stock_chart_closed)
+
+    def _on_stock_chart_closed(self, _result: None) -> None:
+        self._stock_chart_screen = None
+
+    def _retry_stock_chart(self, ticker: str) -> None:
+        self.run_worker(
+            self._reload_stock_chart(ticker), exclusive=False, group="stock-chart"
+        )
+
+    async def _reload_stock_chart(self, ticker: str) -> None:
+        bars = await asyncio.to_thread(fetch_daily_history, ticker)
+        screen = self._stock_chart_screen
+        if screen is not None and self.screen is screen:
+            screen.apply_bars(bars)
 
     def _fetch_event_actuals(self, event: CalendarEvent) -> None:
         self.run_worker(
@@ -724,6 +833,9 @@ class GoldSilverApp(App[None]):
     def action_alerts(self) -> None:
         self.push_screen(AlertsScreen(self._settings, on_change=self._persist_settings))
 
+    def action_news_log(self) -> None:
+        self.push_screen(NewsLogScreen(self._news_service.history()))
+
     def _update_ratio_tile(self) -> None:
         if self._ratio_tile is None:
             return
@@ -744,6 +856,35 @@ class GoldSilverApp(App[None]):
     def _update_yield_tile(self) -> None:
         if self._yield_tile is not None and self._yield_received:
             self._yield_tile.apply_point(self._last_yield_point)
+
+    async def _on_fed_rate(self, point: RatePoint | None) -> None:
+        self._rate_received["FEDRATE"] = True
+        self._last_rate_point["FEDRATE"] = point
+        self._update_rate_tile("FEDRATE")
+
+    async def _on_riksbank_rate(self, point: RatePoint | None) -> None:
+        self._rate_received["RIKSRATE"] = True
+        self._last_rate_point["RIKSRATE"] = point
+        self._update_rate_tile("RIKSRATE")
+
+    def _update_rate_tile(self, tile_id: str) -> None:
+        tile = self._rate_tiles.get(tile_id)
+        if tile is not None and self._rate_received.get(tile_id, False):
+            tile.apply_point(self._last_rate_point.get(tile_id))
+
+    def _update_rate_tiles(self) -> None:
+        for tile_id in self._rate_tiles:
+            self._update_rate_tile(tile_id)
+
+    async def _on_index_point(self, point: IndexPoint) -> None:
+        tile = self._index_tiles.get(point.symbol)
+        if tile is not None:
+            tile.apply_point(point)
+
+    async def _on_index_stale(self, symbol: IndexSymbol, since: datetime) -> None:
+        tile = self._index_tiles.get(symbol)
+        if tile is not None:
+            tile.mark_stale(since)
 
     async def _on_fx_rate(self, rate: FxRate) -> None:
         tile = self._fx_tiles.get(rate.pair)
@@ -814,6 +955,7 @@ class GoldSilverApp(App[None]):
         strip.display = bool(new_widgets)
         self._update_ratio_tile()
         self._update_yield_tile()
+        self._update_rate_tiles()
 
     def _apply_news_panel(self) -> None:
         if self._news_panel is None:
@@ -1071,6 +1213,10 @@ class GoldSilverApp(App[None]):
         await self._insider_service.refresh_now()
         await self._stocktwits_service.refresh_now()
         await self._yields_service.refresh_now()
+        await self._fed_rate_service.refresh_now()
+        await self._riksbank_rate_service.refresh_now()
+        for index_service in self._index_services.values():
+            await index_service.refresh_now()
         self._seed_all()
 
     def action_cycle_zoom(self) -> None:
@@ -1105,6 +1251,7 @@ class GoldSilverApp(App[None]):
         self._apply_news_panel()
         self._update_ratio_tile()
         self._update_yield_tile()
+        self._update_rate_tiles()
         self._seed_all()
         self.run_worker(
             self._refresh_context_feeds(), exclusive=False, group="ctx-refresh"
@@ -1121,6 +1268,10 @@ class GoldSilverApp(App[None]):
         await self._insider_service.refresh_now()
         await self._stocktwits_service.refresh_now()
         await self._yields_service.refresh_now()
+        await self._fed_rate_service.refresh_now()
+        await self._riksbank_rate_service.refresh_now()
+        for index_service in self._index_services.values():
+            await index_service.refresh_now()
 
     def action_toggle_crosshair(self) -> None:
         if self._chart_mode != "live":

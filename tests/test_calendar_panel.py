@@ -9,6 +9,7 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Static
 
+from goldsilver.data.calendar_actuals_store import event_key
 from goldsilver.data.models_macro import CalendarDay, CalendarEvent, CalendarSnapshot
 from goldsilver.widgets.calendar_panel import CalendarPanel
 
@@ -107,6 +108,27 @@ async def test_clicking_event_row_selects_event() -> None:
 
     assert len(app.picked) == 1
     assert app.picked[0].title == "CPI (May)"
+
+
+@pytest.mark.asyncio
+async def test_fetching_event_shows_spinner_then_clears() -> None:
+    event = _high_event()
+    app = _Harness()
+    async with app.run_test() as pilot:
+        panel = app.query_one(CalendarPanel)
+        panel.apply_snapshot(_today_snapshot(event))
+        await pilot.pause()
+        key = event_key(event)
+
+        panel.apply_fetch_started(key)
+        await pilot.pause()
+        body = str(app.query_one("#cal-today", Static).render())
+        assert "fetching…" in body
+
+        panel.apply_fetch_finished(key, True)
+        await pilot.pause()
+        body_after = str(app.query_one("#cal-today", Static).render())
+        assert "fetching…" not in body_after
 
 
 @pytest.mark.asyncio

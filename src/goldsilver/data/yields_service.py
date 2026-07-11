@@ -4,21 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from collections.abc import Awaitable, Callable
-from datetime import date
 from typing import Any
 
 import httpx
 from pydantic import ValidationError
 
-from goldsilver.data.http import make_client
+from goldsilver.data.fred import fetch_fred_pair, fred_api_key, parse_fred_pair
 from goldsilver.data.models_macro import RealYieldPoint
 
 RealYieldHandler = Callable[[RealYieldPoint | None], Awaitable[None] | None]
 
-FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
-FRED_KEY_ENV = "GOLDSILVER_FRED_KEY"
 REAL_YIELD_SERIES = "DFII10"
 REAL_YIELD_REFRESH_S = 4 * 3600.0
 
@@ -26,31 +22,12 @@ _log = logging.getLogger(__name__)
 
 
 def parse_observations(payload: dict[str, Any]) -> RealYieldPoint | None:
-    """Newest-first FRED observations → latest + previous valid values."""
-    observations = payload.get("observations")
-    if not isinstance(observations, list):
-        return None
-    valid: list[tuple[date, float]] = []
-    for obs in observations:
-        if not isinstance(obs, dict):
-            continue
-        raw = str(obs.get("value", ".")).strip()
-        if raw in (".", ""):
-            continue
-        try:
-            valid.append((date.fromisoformat(str(obs.get("date"))), float(raw)))
-        except ValueError:
-            continue
-        if len(valid) == 2:
-            break
-    if not valid:
+    """Newest-first FRED observations -> latest + previous valid values."""
+    obs = parse_fred_pair(payload)
+    if obs is None:
         return None
     try:
-        return RealYieldPoint(
-            value=valid[0][1],
-            previous=valid[1][1] if len(valid) > 1 else None,
-            asof=valid[0][0],
-        )
+        return RealYieldPoint(value=obs.value, previous=obs.previous, asof=obs.asof)
     except ValidationError:
         return None
 
@@ -98,31 +75,25 @@ class RealYieldService:
             await self._refresh_once()
 
     async def _refresh_once(self) -> None:
-        key = os.environ.get(FRED_KEY_ENV, "").strip()
+        key = fred_api_key()
         if not key:
             # No key configured: tell the tile explicitly rather than staying blank.
             await self._emit(None)
             return
         try:
-            async with make_client(timeout=20.0) as client:
-                response = await client.get(
-                    FRED_OBS_URL,
-                    params={
-                        "series_id": REAL_YIELD_SERIES,
-                        "api_key": key,
-                        "file_type": "json",
-                        "sort_order": "desc",
-                        "limit": 10,
-                    },
-                )
-                response.raise_for_status()
-                payload = response.json()
+            obs = await fetch_fred_pair(REAL_YIELD_SERIES, api_key=key)
         except (httpx.HTTPError, ValueError):
             _log.warning("real yield fetch failed", exc_info=True)
             return
-        point = parse_observations(payload)
-        if point is not None:
-            await self._emit(point)
+        if obs is None:
+            return
+        try:
+            point = RealYieldPoint(
+                value=obs.value, previous=obs.previous, asof=obs.asof
+            )
+        except ValidationError:
+            return
+        await self._emit(point)
 
     async def _emit(self, point: RealYieldPoint | None) -> None:
         if self._handler is None:

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 
+from rich.style import Style
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.color import Color
 from textual.containers import Vertical
@@ -11,6 +14,10 @@ from textual.widgets import Static
 
 from goldsilver.data.models import Bar, Tick
 from goldsilver.data.models_macro import Signal
+from goldsilver.data.signal_strategy_info import (
+    INDICATOR_INFO,
+    INDICATOR_PRIORITY_ORDER,
+)
 from goldsilver.widgets.chart import ChartKind, ChartMode, ChartZoom, PriceChart
 
 
@@ -21,18 +28,37 @@ def _rgb(color: tuple[int, int, int] | str) -> str:
     return f"rgb({r},{g},{b})"
 
 
-_STRATEGY_SHORT_LABELS: dict[str, str] = {
-    "Slope Momentum": "Slope",
-    "Bollinger Recoil": "BB",
-    "ROC Momentum": "ROC",
-    "RSI Recoil": "RSI",
-    "MACD Momentum": "MACD",
-    "Z-Score Recoil": "Z",
-}
-
-
 def _short_strategy_label(name: str) -> str:
-    return _STRATEGY_SHORT_LABELS.get(name, name.split()[0])
+    info = INDICATOR_INFO.get(name)
+    return info.short_label if info is not None else name.split()[0]
+
+
+def _priority_sorted(names: list[str]) -> list[str]:
+    return sorted(
+        names,
+        key=lambda n: (
+            INDICATOR_PRIORITY_ORDER.index(n)
+            if n in INDICATOR_PRIORITY_ORDER
+            else len(INDICATOR_PRIORITY_ORDER)
+        ),
+    )
+
+
+class _ChangeRow(Static):
+    """Change/indicator row that toggles a badge's description on click."""
+
+    def __init__(
+        self, *, on_indicator_click: Callable[[str], None], **kwargs: object
+    ) -> None:
+        super().__init__("", **kwargs)  # type: ignore[arg-type]
+        self._on_indicator_click = on_indicator_click
+
+    def on_click(self, event: events.Click) -> None:
+        style = event.style
+        key = style.meta.get("indicator") if style is not None else None
+        if key is not None:
+            self._on_indicator_click(key)
+            event.stop()
 
 
 class MetalPanel(Vertical):
@@ -42,6 +68,7 @@ class MetalPanel(Vertical):
     day_high: reactive[float] = reactive(0.0)
     day_low: reactive[float] = reactive(0.0)
     updated_at: reactive[datetime | None] = reactive(None)
+    expanded_indicator: reactive[str | None] = reactive(None)
 
     def __init__(
         self,
@@ -62,7 +89,12 @@ class MetalPanel(Vertical):
     def compose(self) -> ComposeResult:
         yield Static("--:--:--", id="updated", classes="updated")
         yield Static(self._render_header(), id="header", classes="header")
-        yield Static("", id="change-row", classes="change-row")
+        yield _ChangeRow(
+            on_indicator_click=self._toggle_indicator,
+            id="change-row",
+            classes="change-row",
+        )
+        yield Static("", id="indicator-detail", classes="indicator-detail")
         yield PriceChart(color=self._accent_rgb_tuple())
 
     def _accent_rgb_tuple(self) -> tuple[int, int, int] | str:
@@ -173,13 +205,20 @@ class MetalPanel(Vertical):
     def _refresh_indicators(self) -> None:
         self._refresh_change_row()
 
+    def _toggle_indicator(self, name: str) -> None:
+        self.expanded_indicator = None if self.expanded_indicator == name else name
+
+    def watch_expanded_indicator(self, _: str | None) -> None:
+        self._refresh_indicator_detail()
+
     def _render_indicators(self) -> Text:
         if not self._visible_signals:
             return Text("")
-        parts: list[tuple[str, str]] = []
-        for i, name in enumerate(self._visible_signals):
+        text = Text()
+        for i, name in enumerate(_priority_sorted(self._visible_signals)):
             if i > 0:
-                parts.append(("  ·  ", "#3a3a4a"))
+                text.append("  ·  ", style="#3a3a4a")
+            badge_start = len(text)
             label = _short_strategy_label(name)
             sig = self._signals.get(name)
             label_color = (
@@ -187,19 +226,40 @@ class MetalPanel(Vertical):
                 if sig is not None and sig.kind == "recoil"
                 else "dim #7dcfff"
             )
-            parts.append((f"{label} ", label_color))
+            text.append(f"{label} ", style=label_color)
             if sig is None:
-                parts.append(("warming up", "dim #5a5a6a"))
-                continue
-            if sig.action == "BUY":
-                parts.append(("▲ BUY", "bold #7dff8c"))
-                parts.append((f" {sig.intensity_sigma:.1f}σ", "#7dff8c"))
+                text.append("warming up", style="dim #5a5a6a")
+            elif sig.action == "BUY":
+                text.append("▲ BUY", style="bold #7dff8c")
+                text.append(f" {sig.intensity_sigma:.1f}σ", style="#7dff8c")
             elif sig.action == "SELL":
-                parts.append(("▼ SELL", "bold #ff6b6b"))
-                parts.append((f" {sig.intensity_sigma:.1f}σ", "#ff6b6b"))
+                text.append("▼ SELL", style="bold #ff6b6b")
+                text.append(f" {sig.intensity_sigma:.1f}σ", style="#ff6b6b")
             else:
-                parts.append(("· idle", "dim #7a7a8a"))
-        return Text.assemble(*parts)
+                text.append("· idle", style="dim #7a7a8a")
+            if name in INDICATOR_INFO:
+                text.stylize(Style(meta={"indicator": name}), badge_start, len(text))
+        return text
+
+    def _render_indicator_detail(self) -> Text:
+        name = self.expanded_indicator
+        info = INDICATOR_INFO.get(name) if name is not None else None
+        if info is None:
+            return Text("")
+        text = Text()
+        text.append(f"{name}  ", style="bold #e0e0e8")
+        text.append(
+            f"priority {info.priority_rank}/{len(INDICATOR_PRIORITY_ORDER)}\n",
+            style="dim #7a7a8a",
+        )
+        text.append(f"{info.description}\n", style="#c0c0d0")
+        text.append(info.rationale, style="dim #9a9aa8")
+        return text
+
+    def _refresh_indicator_detail(self) -> None:
+        widget = self.query_one_optional("#indicator-detail", Static)
+        if widget is not None:
+            widget.update(self._render_indicator_detail())
 
     def set_chart_zoom(self, zoom: ChartZoom) -> None:
         self.query_one(PriceChart).set_zoom(zoom)

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from marketcore.models import Bar, Tick
+from marketcore.models import Bar, DailyChange, Tick
 
 GOLD = "XAU"
 SILVER = "XAG"
 SYMBOLS = (GOLD, SILVER)
 
-__all__ = ["Bar", "Tick", "GOLD", "SILVER", "SYMBOLS"]
+__all__ = ["Bar", "DailyChange", "Tick", "GOLD", "SILVER", "SYMBOLS"]

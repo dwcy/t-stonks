@@ -34,9 +34,15 @@ _MINI_TILE_LABEL: dict[str, str] = {
     "BRENT": "Oil",
     "COPPER": "Copper",
     "BTC": "BTC",
-    "RATIO": "Au/Ag ratio",
-    "DXY": "DXY (USD index)",
+    "RATIO": "Gold/Silver ratio",
+    "DXY": "Dollar Index",
     "REALYIELD": "10Y real yield",
+    "FEDRATE": "Fed funds rate",
+    "RIKSRATE": "Riksbank policy rate",
+    "DAX": "DAX (Germany)",
+    "CAC40": "CAC 40 (France)",
+    "FTSE100": "FTSE 100 (UK)",
+    "NIKKEI225": "Nikkei 225 (Japan)",
 }
 
 
