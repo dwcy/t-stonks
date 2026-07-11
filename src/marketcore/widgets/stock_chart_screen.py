@@ -11,6 +11,7 @@ omitted when the caller (goldsilver's app.py) has nothing to pass.
 from __future__ import annotations
 
 import webbrowser
+from collections.abc import Callable
 from datetime import datetime
 
 from textual.app import ComposeResult
@@ -26,9 +27,28 @@ from marketcore.widgets.daily_change_strip import (
     compute_daily_changes,
 )
 
+DEFAULT_ACCENT_COLOR = "#8ab4ff"
+ERROR_MESSAGE = "Couldn't load chart data — press r to retry."
+
 
 class StockChartScreen(ModalScreen[None]):
-    BINDINGS = [("escape", "dismiss", "Close")]
+    # Textual's App.AUTO_FOCUS defaults to "*", which would auto-focus the
+    # "Close" button and make it swallow "enter" (pin) as a button press.
+    AUTO_FOCUS = ""
+
+    BINDINGS = [
+        ("escape", "dismiss", "Close"),
+        ("z", "cycle_zoom", "Zoom"),
+        ("h", "cycle_mode", "Mode"),
+        ("x", "toggle_crosshair", "Crosshair"),
+        ("left", "crosshair_left", "← cursor"),
+        ("right", "crosshair_right", "cursor →"),
+        ("pageup", "crosshair_page_left", "←← cursor"),
+        ("pagedown", "crosshair_page_right", "cursor →→"),
+        ("enter", "pin_current", "Pin"),
+        ("c", "clear_pins", "Clear pins"),
+        ("r", "retry", "Retry"),
+    ]
 
     def __init__(
         self,
@@ -39,6 +59,8 @@ class StockChartScreen(ModalScreen[None]):
         latest_report_summary: str | None = None,
         latest_report_path: str | None = None,
         dividend: DividendInfo | None = None,
+        accent_color: tuple[int, int, int] | str = DEFAULT_ACCENT_COLOR,
+        on_retry: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self._ticker = ticker
@@ -47,11 +69,15 @@ class StockChartScreen(ModalScreen[None]):
         self._latest_report_summary = latest_report_summary
         self._latest_report_path = latest_report_path
         self._dividend = dividend
+        self._accent_color = accent_color
+        self._on_retry = on_retry
 
     def compose(self) -> ComposeResult:
         with Container(id="stock-chart-dialog"):
             yield Static(self._ticker, id="stock-chart-title")
-            yield PriceChart(color="white")
+            if not self._bars:
+                yield Static(ERROR_MESSAGE, id="stock-chart-error")
+            yield PriceChart(color=self._accent_color)
             yield DailyChangeStrip()
             if self._show_report_section:
                 yield Static(self._build_report_text(), id="stock-chart-report")
@@ -84,10 +110,71 @@ class StockChartScreen(ModalScreen[None]):
         )
 
     def on_mount(self) -> None:
-        self.query_one(PriceChart).seed(self._bars, kind="line")
+        self._seed_chart()
         self.query_one(DailyChangeStrip).apply_changes(
             compute_daily_changes(self._bars)
         )
+
+    def _seed_chart(self) -> None:
+        chart = self.query_one(PriceChart)
+        bars = self._bars
+        show_day_refs = len(bars) >= 2
+        chart.seed(
+            bars,
+            kind="line",
+            show_sma=True,
+            show_vwap=True,
+            show_day_refs=show_day_refs,
+        )
+        if show_day_refs:
+            chart.apply_session_refs(bars[-2].close, bars[-1].high, bars[-1].low)
+        chart.set_mode("history")
+
+    def apply_bars(self, bars: list[Bar]) -> None:
+        """Re-seed after a retry-triggered refetch, swapping the error message out."""
+        self._bars = bars
+        error = self.query_one_optional("#stock-chart-error", Static)
+        if bars:
+            if error is not None:
+                error.remove()
+        elif error is None:
+            self.query_one("#stock-chart-dialog", Container).mount(
+                Static(ERROR_MESSAGE, id="stock-chart-error"),
+                before=self.query_one(PriceChart),
+            )
+        self._seed_chart()
+        self.query_one(DailyChangeStrip).apply_changes(compute_daily_changes(bars))
+
+    def action_cycle_zoom(self) -> None:
+        self.query_one(PriceChart).cycle_zoom()
+
+    def action_cycle_mode(self) -> None:
+        self.query_one(PriceChart).cycle_mode()
+
+    def action_toggle_crosshair(self) -> None:
+        self.query_one(PriceChart).toggle_crosshair()
+
+    def action_crosshair_left(self) -> None:
+        self.query_one(PriceChart).move_crosshair(-1)
+
+    def action_crosshair_right(self) -> None:
+        self.query_one(PriceChart).move_crosshair(1)
+
+    def action_crosshair_page_left(self) -> None:
+        self.query_one(PriceChart).move_crosshair(-60)
+
+    def action_crosshair_page_right(self) -> None:
+        self.query_one(PriceChart).move_crosshair(60)
+
+    def action_pin_current(self) -> None:
+        self.query_one(PriceChart).pin_current()
+
+    def action_clear_pins(self) -> None:
+        self.query_one(PriceChart).clear_pins()
+
+    def action_retry(self) -> None:
+        if self._on_retry is not None:
+            self._on_retry()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "stock-chart-close":

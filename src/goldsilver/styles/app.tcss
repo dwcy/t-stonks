@@ -1024,11 +1024,22 @@ StockChartScreen {
     layout: vertical;
 }
 
+#stock-chart-dialog PriceChart {
+    height: 30;
+}
+
 #stock-chart-title {
     width: 100%;
     height: auto;
     color: #e8e8f0;
     text-style: bold;
+    margin-bottom: 1;
+}
+
+#stock-chart-error {
+    width: 100%;
+    height: auto;
+    color: #ff9b6b;
     margin-bottom: 1;
 }
 

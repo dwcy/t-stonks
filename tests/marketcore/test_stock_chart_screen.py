@@ -52,6 +52,80 @@ async def test_modal_seeds_chart_and_strip() -> None:
 
 
 @pytest.mark.asyncio
+async def test_modal_seeds_chart_with_full_feature_parity() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        screen = StockChartScreen("NVDA", _bars())
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        chart = screen.query_one(PriceChart)
+        assert chart._kind == "line"
+        assert chart._show_sma is True
+        assert chart._show_vwap is True
+        assert chart._show_day_refs is True
+        assert chart.mode == "history"
+        bars = _bars()
+        assert chart._prev_close == bars[-2].close
+        assert chart._sess_high == bars[-1].high
+        assert chart._sess_low == bars[-1].low
+
+
+@pytest.mark.asyncio
+async def test_modal_default_accent_color() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        screen = StockChartScreen("NVDA", _bars())
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        assert screen.query_one(PriceChart)._color == "#8ab4ff"
+
+
+@pytest.mark.asyncio
+async def test_modal_accepts_custom_accent_color() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        screen = StockChartScreen("NVDA", _bars(), accent_color=(155, 89, 255))
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        assert screen.query_one(PriceChart)._color == (155, 89, 255)
+
+
+@pytest.mark.asyncio
+async def test_modal_key_bindings_drive_chart_state() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        screen = StockChartScreen("NVDA", _bars())
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        chart = screen.query_one(PriceChart)
+        assert chart.mode == "history"
+
+        await pilot.press("h")
+        await pilot.pause()
+        assert chart.mode == "live"
+
+        await pilot.press("x")
+        await pilot.pause()
+        assert chart._view.crosshair_active is True
+
+        await pilot.press("left")
+        await pilot.pause()
+        assert chart._view.crosshair_index == len(chart._bars) - 2
+
+        await pilot.press("enter")
+        await pilot.pause()
+        assert chart._view.crosshair_index in chart._view.pinned_indices
+
+        await pilot.press("c")
+        await pilot.pause()
+        assert chart._view.pinned_indices == set()
+
+
+@pytest.mark.asyncio
 async def test_modal_handles_fewer_than_forty_days() -> None:
     app = _Harness()
     async with app.run_test() as pilot:
@@ -74,6 +148,74 @@ async def test_modal_handles_zero_bars_without_crashing() -> None:
 
         strip = screen.query_one(DailyChangeStrip)
         assert "No daily history available." in str(strip.render())
+
+
+@pytest.mark.asyncio
+async def test_modal_shows_error_message_when_bars_empty() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        screen = StockChartScreen("NVDA", [])
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        error = screen.query_one("#stock-chart-error", Static)
+        assert "Couldn't load chart data" in str(error.render())
+
+
+@pytest.mark.asyncio
+async def test_modal_omits_error_message_when_bars_present() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        screen = StockChartScreen("NVDA", _bars())
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        assert len(screen.query("#stock-chart-error")) == 0
+
+
+@pytest.mark.asyncio
+async def test_retry_action_invokes_callback() -> None:
+    calls: list[bool] = []
+    app = _Harness()
+    async with app.run_test() as pilot:
+        screen = StockChartScreen("NVDA", [], on_retry=lambda: calls.append(True))
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        await pilot.press("r")
+        await pilot.pause()
+
+        assert calls == [True]
+
+
+@pytest.mark.asyncio
+async def test_apply_bars_clears_error_and_reseeds_chart() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        screen = StockChartScreen("NVDA", [])
+        await app.push_screen(screen)
+        await pilot.pause()
+        assert len(screen.query("#stock-chart-error")) == 1
+
+        screen.apply_bars(_bars())
+        await pilot.pause()
+
+        assert len(screen.query("#stock-chart-error")) == 0
+        assert len(screen.query_one(PriceChart)._bars) == 45
+
+
+@pytest.mark.asyncio
+async def test_apply_bars_keeps_error_when_retry_still_empty() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        screen = StockChartScreen("NVDA", [])
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        screen.apply_bars([])
+        await pilot.pause()
+
+        assert len(screen.query("#stock-chart-error")) == 1
 
 
 @pytest.mark.asyncio

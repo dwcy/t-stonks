@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from itertools import groupby
+
 from rich.text import Text
 from textual.widgets import Static
 
@@ -45,15 +47,20 @@ class DailyChangeStrip(Static):
         if not changes:
             return Text("No daily history available.", style=FLAT_COLOR)
         text = Text()
-        for i, change in enumerate(changes):
-            if i > 0:
-                text.append("  ")
-            if change.direction == "up":
-                arrow, color = "▲", UP_COLOR
-            elif change.direction == "down":
-                arrow, color = "▼", DOWN_COLOR
-            else:
-                arrow, color = "▬", FLAT_COLOR
-            sign = "+" if change.change_percent > 0 else ""
-            text.append(f"{arrow}{sign}{change.change_percent:.1f}%", style=color)
+        for week_num, group in groupby(
+            changes, key=lambda c: c.date.isocalendar().week
+        ):
+            text.append(f"w{week_num:02d}[", style=FLAT_COLOR)
+            for i, change in enumerate(group):
+                if i > 0:
+                    text.append(" ")
+                if change.direction == "up":
+                    arrow, color = "▲", UP_COLOR
+                elif change.direction == "down":
+                    arrow, color = "▼", DOWN_COLOR
+                else:
+                    arrow, color = "▬", FLAT_COLOR
+                sign = "+" if change.change_percent > 0 else ""
+                text.append(f"{arrow}{sign}{change.change_percent:.1f}%", style=color)
+            text.append("]  ", style=FLAT_COLOR)
         return text

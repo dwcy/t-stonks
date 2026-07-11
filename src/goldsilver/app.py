@@ -278,6 +278,7 @@ class GoldSilverApp(App[None]):
             on_enable_changed=self._on_simulator_enabled,
         )
         self._reports = ReportController(self)
+        self._stock_chart_screen: StockChartScreen | None = None
 
     @property
     def _timeframe_label(self) -> str:
@@ -771,16 +772,31 @@ class GoldSilverApp(App[None]):
             next_report_at = self._reports.next_run_at()
             latest_report_summary = self._reports.latest_report_summary_for(ticker)
             latest_report_path = self._reports.latest_report_uri_for(ticker)
-        self.push_screen(
-            StockChartScreen(
-                ticker,
-                bars,
-                next_report_at=next_report_at,
-                latest_report_summary=latest_report_summary,
-                latest_report_path=latest_report_path,
-                dividend=dividend,
-            )
+        screen = StockChartScreen(
+            ticker,
+            bars,
+            next_report_at=next_report_at,
+            latest_report_summary=latest_report_summary,
+            latest_report_path=latest_report_path,
+            dividend=dividend,
+            on_retry=lambda: self._retry_stock_chart(ticker),
         )
+        self._stock_chart_screen = screen
+        self.push_screen(screen, self._on_stock_chart_closed)
+
+    def _on_stock_chart_closed(self, _result: None) -> None:
+        self._stock_chart_screen = None
+
+    def _retry_stock_chart(self, ticker: str) -> None:
+        self.run_worker(
+            self._reload_stock_chart(ticker), exclusive=False, group="stock-chart"
+        )
+
+    async def _reload_stock_chart(self, ticker: str) -> None:
+        bars = await asyncio.to_thread(fetch_daily_history, ticker)
+        screen = self._stock_chart_screen
+        if screen is not None and self.screen is screen:
+            screen.apply_bars(bars)
 
     def _fetch_event_actuals(self, event: CalendarEvent) -> None:
         self.run_worker(

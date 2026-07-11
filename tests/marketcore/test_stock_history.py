@@ -8,7 +8,10 @@ import pandas as pd
 
 from marketcore.models import Bar
 from marketcore.services import stock_service
-from marketcore.widgets.daily_change_strip import compute_daily_changes
+from marketcore.widgets.daily_change_strip import (
+    DailyChangeStrip,
+    compute_daily_changes,
+)
 
 
 def _fake_history_df() -> pd.DataFrame:
@@ -112,6 +115,29 @@ def test_compute_daily_changes_derives_direction() -> None:
     assert changes[0].direction == "up"
     assert changes[1].direction == "flat"
     assert changes[2].direction == "down"
+
+
+def test_daily_change_strip_groups_by_iso_week() -> None:
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    bars = [
+        Bar(
+            symbol="X",
+            time=base + timedelta(days=i),
+            open=100.0 + i,
+            high=100.0 + i,
+            low=100.0 + i,
+            close=100.0 + i,
+            volume=1.0,
+        )
+        for i in range(15)
+    ]
+    changes = compute_daily_changes(bars)
+    weeks = sorted({c.date.isocalendar().week for c in changes})
+    assert len(weeks) >= 2
+
+    text = str(DailyChangeStrip._build_text(changes))
+    for week_num in weeks:
+        assert f"w{week_num:02d}[" in text
 
 
 def test_fetch_dividend_info_returns_most_recent_payment(monkeypatch) -> None:

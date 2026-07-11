@@ -5,6 +5,19 @@ Story 9/10 chart detail modal surfaced three requests. Two smaller bugs from the
 testing session were fixed immediately (see "Already resolved" below) — this document
 covers the two larger items that need a dedicated implementation pass.
 
+**Status: implemented 2026-07-11.** Both parts landed as described below, plus one bug
+found while wiring up the new key bindings: `StockChartScreen` had no `AUTO_FOCUS`
+override, so Textual's `App.AUTO_FOCUS = "*"` default auto-focused the "Close" button
+on open, which then swallowed the new `enter` (pin) binding as a button press instead
+of letting it bubble to the screen. Fixed by setting `AUTO_FOCUS = ""` on the screen.
+Verified live via a Pilot smoke test: weekly strip groups correctly (`w19[...] w20[...]`),
+chart seeds with SMA/VWAP/day-refs all on and `mode="history"`, and `h`/`x`/`enter`/`c`
+all mutate real `PriceChart` state. One known, accepted quirk: `z` (zoom) and `h` (mode)
+are wired for parity per the user's explicit "don't cherry-pick" direction, but zooming
+and switching to `mode="live"` are functionally no-ops/visually degenerate for daily
+bars (zoom windows are in minutes; live mode assumes a live tick stream) — this is a
+structural property of the shared `PriceChart` widget, not something introduced here.
+
 ## Context
 
 The chart detail modal (`StockChartScreen`, `src/marketcore/widgets/stock_chart_screen.py`)
