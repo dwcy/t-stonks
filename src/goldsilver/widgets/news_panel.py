@@ -34,7 +34,6 @@ SOURCE_STYLE = {
     "TT": "#fecc00",
     "TRUMP": "#bb9af7",
     "WHITEHOUSE": "#e0e0e8",
-    "PressTV": "#4caf50",
     "IRNA": "#66bb6a",
     "MEHR": "#81c784",
 }
