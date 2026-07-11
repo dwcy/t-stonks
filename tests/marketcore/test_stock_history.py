@@ -44,6 +44,37 @@ def test_fetch_daily_history_parses_ohlcv(monkeypatch) -> None:
     assert all(b.time.tzinfo is not None for b in bars)
 
 
+def test_fetch_daily_history_skips_nan_rows(monkeypatch) -> None:
+    """yfinance's still-forming "today" row often has NaN OHLC; a NaN bar breaks
+    the chart's y-axis range calc, so it must be filtered rather than passed
+    through."""
+    index = pd.to_datetime(["2026-06-01", "2026-06-02", "2026-06-03"], utc=True)
+    df = pd.DataFrame(
+        {
+            "Open": [100.0, 101.0, float("nan")],
+            "High": [102.0, 104.0, float("nan")],
+            "Low": [99.0, 100.5, float("nan")],
+            "Close": [101.0, 103.0, float("nan")],
+            "Volume": [1000.0, 1200.0, 500.0],
+        },
+        index=index,
+    )
+
+    class _FakeTicker:
+        def __init__(self, sym: str) -> None:
+            self.sym = sym
+
+        def history(self, period: str, interval: str):
+            return df
+
+    monkeypatch.setattr(stock_service.yf, "Ticker", _FakeTicker)
+
+    bars = stock_service.fetch_daily_history("NVDA")
+
+    assert len(bars) == 2
+    assert all(b.close == b.close for b in bars)  # no NaN survives
+
+
 def test_fetch_daily_history_returns_empty_on_failure(monkeypatch) -> None:
     class _FailingTicker:
         def __init__(self, sym: str) -> None:

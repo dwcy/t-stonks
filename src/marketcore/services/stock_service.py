@@ -193,18 +193,33 @@ def fetch_daily_history(sym: str, *, period: str = "3mo") -> list[Bar]:
         if t.tzinfo is None:
             t = t.replace(tzinfo=timezone.utc)
         try:
+            o, h, low, c, v = (
+                float(row["Open"]),
+                float(row["High"]),
+                float(row["Low"]),
+                float(row["Close"]),
+                float(row["Volume"]),
+            )
+        except (ValueError, KeyError):
+            continue
+        # yfinance's still-forming "today" row often has NaN OHLC — a NaN bar
+        # breaks the chart's y-axis range calc (min/max over NaN), leaving the
+        # whole chart blank. Skip it rather than pass it through.
+        if o != o or h != h or low != low or c != c or v != v:
+            continue
+        try:
             bars.append(
                 Bar(
                     symbol=sym,
                     time=t.astimezone(timezone.utc),
-                    open=float(row["Open"]),
-                    high=float(row["High"]),
-                    low=float(row["Low"]),
-                    close=float(row["Close"]),
-                    volume=float(row["Volume"]),
+                    open=o,
+                    high=h,
+                    low=low,
+                    close=c,
+                    volume=v,
                 )
             )
-        except (ValueError, KeyError, ValidationError):
+        except ValidationError:
             continue
     return bars
 
