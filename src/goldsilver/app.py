@@ -87,6 +87,7 @@ from goldsilver.widgets import (
     FxTile,
     IndexTile,
     InsiderPanel,
+    MarketTimeline,
     MetalPanel,
     NewsLogScreen,
     NewsPanel,
@@ -240,6 +241,7 @@ class GoldSilverApp(App[None]):
         )
         self._returns_calc = ReturnsCalculator()
         self._insider_panel: InsiderPanel | None = None
+        self._market_timeline: MarketTimeline | None = None
         self._insider_service = InsiderTradesService(
             handler=self._on_insider_trades,
             stale_handler=self._on_insider_stale,
@@ -334,6 +336,7 @@ class GoldSilverApp(App[None]):
         self._calendar_panel = CalendarPanel(
             on_event_selected=self._show_calendar_event
         )
+        self._market_timeline = MarketTimeline()
         self._news_panel = NewsPanel("Markets news")
         self._stocktwits_panel = StockTwitsPanel()
         if not s.show_stocktwits:
@@ -423,6 +426,7 @@ class GoldSilverApp(App[None]):
             yield self._extra_stock_row
             yield self._metals_grid
             yield self._calendar_panel
+            yield self._market_timeline
             yield self._news_panel
             yield self._stocktwits_panel
             yield self._insider_panel
@@ -444,8 +448,9 @@ class GoldSilverApp(App[None]):
                         yield self._extra_stock_row
                     yield self._metals_grid
                 with Vertical(id="wide-right"):
-                    yield self._news_panel
                     yield self._calendar_panel
+                    yield self._market_timeline
+                    yield self._news_panel
             yield self._stocktwits_panel
             yield self._insider_panel
             yield self._congress_panel
