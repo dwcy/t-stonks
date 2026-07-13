@@ -10,6 +10,7 @@ from goldsilver.widgets.futures_strip import FuturesStrip
 from goldsilver.widgets.fx_tile import FxTile
 from goldsilver.widgets.index_tile import IndexTile
 from goldsilver.widgets.insider_panel import InsiderPanel
+from goldsilver.widgets.market_timeline import MarketTimeline
 from goldsilver.widgets.metal_panel import MetalPanel
 from goldsilver.widgets.news_log_screen import NewsLogScreen
 from goldsilver.widgets.news_panel import NewsPanel
@@ -39,6 +40,7 @@ __all__ = [
     "FxTile",
     "IndexTile",
     "InsiderPanel",
+    "MarketTimeline",
     "MetalPanel",
     "NewsLogScreen",
     "NewsPanel",

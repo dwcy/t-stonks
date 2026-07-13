@@ -224,6 +224,16 @@ NewsPanel {
     background: #10101a;
 }
 
+MarketTimeline {
+    height: 3;
+    padding: 0 2;
+    border-top: hkey #2a2a3a;
+    border-bottom: hkey #2a2a3a;
+    background: #14141c;
+    content-align: left middle;
+    text-overflow: ellipsis;
+}
+
 CongressPanel {
     height: auto;
     min-height: 14;
