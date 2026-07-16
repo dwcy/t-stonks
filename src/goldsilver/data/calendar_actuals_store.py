@@ -35,6 +35,7 @@ class StoredActuals(BaseModel):
     forecast: str | None = None
     previous: str | None = None
     actual_summary: str | None = None
+    expected_summary: str | None = None
     analysis: EventAnalysis | None = None
     scheduled_time: datetime
     fetched_at: datetime
@@ -46,12 +47,25 @@ class StoredActuals(BaseModel):
             forecast=event.forecast,
             previous=event.previous,
             actual_summary=event.actual_summary,
+            expected_summary=event.expected_summary,
             analysis=event.analysis,
             scheduled_time=event.scheduled_time,
             fetched_at=datetime.now(timezone.utc),
         )
 
     def apply_to(self, event: CalendarEvent) -> CalendarEvent:
+        # A record with no `actual` is a forward-looking preview: fill forecast /
+        # anticipated impact but leave `status` SCHEDULED so a later actuals fetch
+        # can still release it.
+        if self.actual is None:
+            return event.model_copy(
+                update={
+                    "forecast": self.forecast or event.forecast,
+                    "previous": self.previous or event.previous,
+                    "expected_summary": self.expected_summary,
+                    "analysis": self.analysis or event.analysis,
+                }
+            )
         return event.model_copy(
             update={
                 "actual": self.actual,

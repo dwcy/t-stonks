@@ -26,6 +26,7 @@ _SOURCE_STYLE = {
 _LABEL_STYLE = "#7a7a8a"
 _VALUE_STYLE = "#e0e0e8"
 _RELEASED_STYLE = "#7dff8c"
+_EXPECTED_STYLE = "#ffd56b"
 _DIR_STYLE = {"bullish": "#7dff8c", "bearish": "#ff6b6b", "neutral": "#9a9aa8"}
 _DIR_ARROW = {"bullish": "▲", "bearish": "▼", "neutral": "→"}
 _SURPRISE_LABEL = {
@@ -46,11 +47,15 @@ class CalendarEventScreen(ModalScreen[None]):
         *,
         on_fetch: Callable[[], None] | None = None,
         can_fetch: bool = False,
+        fetch_label: str = "Fetch now",
+        fetch_pending_message: str = "Fetching released figures…",
     ) -> None:
         super().__init__()
         self._event = event
         self._on_fetch = on_fetch
         self._can_fetch = can_fetch
+        self._fetch_label = fetch_label
+        self._fetch_pending_message = fetch_pending_message
 
     def compose(self) -> ComposeResult:
         with Container(id="cal-event-dialog"):
@@ -61,7 +66,9 @@ class CalendarEventScreen(ModalScreen[None]):
             yield Static("", id="cal-event-status")
             with Horizontal(id="cal-event-actions"):
                 if self._can_fetch:
-                    yield Button("Fetch now", id="cal-event-fetch", variant="primary")
+                    yield Button(
+                        self._fetch_label, id="cal-event-fetch", variant="primary"
+                    )
                 yield Button("Close", id="cal-event-close")
 
     def _build_meta(self) -> Text:
@@ -92,21 +99,22 @@ class CalendarEventScreen(ModalScreen[None]):
     def _build_figures(self) -> Text:
         event = self._event
         text = Text()
-        has_data = event.status == "RELEASED" or event.actual is not None
-        if not has_data:
-            text.append("No released figures yet.", style="#7a7a8a")
+        has_actual = event.actual is not None
+        if not (has_actual or event.forecast or event.previous):
+            text.append("No forecast or released figures yet.", style="#7a7a8a")
             return text
-        for label, value in (
-            ("Actual   ", event.actual),
-            ("Forecast ", event.forecast),
-            ("Previous ", event.previous),
-        ):
+        value_style = _RELEASED_STYLE if has_actual else _EXPECTED_STYLE
+        rows = [("Forecast ", event.forecast), ("Previous ", event.previous)]
+        if has_actual:
+            rows.insert(0, ("Actual   ", event.actual))
+        for label, value in rows:
             if value:
                 text.append(label, style=_LABEL_STYLE)
-                text.append(f"{value}\n", style=_RELEASED_STYLE)
-        if event.actual_summary:
+                text.append(f"{value}\n", style=value_style)
+        summary = event.actual_summary if has_actual else event.expected_summary
+        if summary:
             text.append("\n")
-            text.append(event.actual_summary, style="#c0c0d0")
+            text.append(summary, style="#c0c0d0")
         return text
 
     def _build_analysis(self) -> Text:
@@ -114,9 +122,11 @@ class CalendarEventScreen(ModalScreen[None]):
         text = Text()
         if analysis is None:
             return text
-        text.append("\nImpact read\n", style=_LABEL_STYLE)
+        is_preview = self._event.is_expectation
+        heading = "Expected impact (if on consensus)" if is_preview else "Impact read"
+        text.append(f"\n{heading}\n", style=_LABEL_STYLE)
         surprise = _SURPRISE_LABEL.get(analysis.surprise, "")
-        if surprise:
+        if surprise and not is_preview:
             text.append("vs consensus  ", style=_LABEL_STYLE)
             text.append(
                 f"{surprise}\n",
@@ -159,5 +169,5 @@ class CalendarEventScreen(ModalScreen[None]):
             self.dismiss()
         elif event.button.id == "cal-event-fetch" and self._on_fetch is not None:
             self._enable_fetch(False)
-            self.set_status("Fetching released figures…", style="#ffd56b")
+            self.set_status(self._fetch_pending_message, style="#ffd56b")
             self._on_fetch()

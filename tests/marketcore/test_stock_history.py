@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -184,6 +184,54 @@ def test_fetch_dividend_info_handles_failure(monkeypatch) -> None:
     info = stock_service.fetch_dividend_info("XYZ")
 
     assert info.amount is None
+
+
+def test_fetch_stock_calendar_parses_forward_dates(monkeypatch) -> None:
+    calendar = {
+        "Earnings Date": [date(2026, 7, 29)],
+        "Ex-Dividend Date": date(2026, 8, 20),
+        "Dividend Date": date(2026, 9, 10),
+    }
+
+    class _FakeTicker:
+        def __init__(self, sym: str) -> None:
+            self.calendar = calendar
+
+    monkeypatch.setattr(stock_service.yf, "Ticker", _FakeTicker)
+
+    cal = stock_service.fetch_stock_calendar("MSFT")
+
+    assert cal.ticker == "MSFT"
+    assert cal.earnings_dates == (date(2026, 7, 29),)
+    assert cal.ex_dividend_date == date(2026, 8, 20)
+    assert cal.dividend_pay_date == date(2026, 9, 10)
+
+
+def test_fetch_stock_calendar_handles_missing_fields(monkeypatch) -> None:
+    class _FakeTicker:
+        def __init__(self, sym: str) -> None:
+            self.calendar = {"Earnings Date": [date(2026, 7, 17)]}
+
+    monkeypatch.setattr(stock_service.yf, "Ticker", _FakeTicker)
+
+    cal = stock_service.fetch_stock_calendar("VOLV-B.ST")
+
+    assert cal.earnings_dates == (date(2026, 7, 17),)
+    assert cal.ex_dividend_date is None
+    assert cal.dividend_pay_date is None
+
+
+def test_fetch_stock_calendar_handles_failure(monkeypatch) -> None:
+    class _FailingTicker:
+        def __init__(self, sym: str) -> None:
+            raise RuntimeError("network down")
+
+    monkeypatch.setattr(stock_service.yf, "Ticker", _FailingTicker)
+
+    cal = stock_service.fetch_stock_calendar("XYZ")
+
+    assert cal.ticker == "XYZ"
+    assert cal.earnings_dates == ()
 
 
 def test_compute_daily_changes_caps_at_max_days() -> None:

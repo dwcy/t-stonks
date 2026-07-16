@@ -143,6 +143,8 @@ def same_day_titles(
         for sibling in day.events:
             if _event_key(sibling) == target:
                 continue
+            if sibling.source == "STOCK":
+                continue
             if sibling.importance not in FETCHABLE_IMPORTANCE:
                 continue
             titles.append(sibling.title)
