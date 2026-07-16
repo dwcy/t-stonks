@@ -63,8 +63,15 @@ class CalendarEvent(BaseModel):
     previous: str | None = None
     actual: str | None = None
     actual_summary: str | None = None
+    expected_summary: str | None = None
     status: EventStatus = "SCHEDULED"
     analysis: EventAnalysis | None = None
+
+    @property
+    def is_expectation(self) -> bool:
+        """True once a forward-looking preview has populated an analysis but no
+        actual has been released yet — used to render 'expected' vs 'released'."""
+        return self.actual is None and self.analysis is not None
 
     @field_validator("scheduled_time")
     @classmethod

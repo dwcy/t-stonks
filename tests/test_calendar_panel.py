@@ -164,6 +164,19 @@ async def test_fetching_event_shows_spinner_then_clears() -> None:
 
 
 @pytest.mark.asyncio
+async def test_scheduled_event_with_forecast_shows_inline() -> None:
+    event = _high_event().model_copy(update={"forecast": "3.1%", "previous": "3.0%"})
+    app = _Harness()
+    async with app.run_test() as pilot:
+        panel = app.query_one(CalendarPanel)
+        panel.apply_snapshot(_today_snapshot(event))
+        await pilot.pause()
+        body = str(app.query_one("#cal-today", Static).render())
+
+    assert "fc 3.1%" in body
+
+
+@pytest.mark.asyncio
 async def test_released_event_renders_actual_figure() -> None:
     event = _high_event().model_copy(
         update={

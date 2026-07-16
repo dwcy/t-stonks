@@ -750,11 +750,24 @@ class GoldSilverApp(App[None]):
             self._calendar_panel.apply_fetch_finished(key, ok)
 
     def _show_calendar_event(self, event: CalendarEvent) -> None:
-        screen = CalendarEventScreen(
-            event,
-            on_fetch=lambda: self._fetch_event_actuals(event),
-            can_fetch=find_claude() is not None,
-        )
+        claude_ready = find_claude() is not None
+        now = datetime.now(timezone.utc)
+        upcoming = event.status != "RELEASED" and event.scheduled_time > now
+        preview_worthy = event.importance in ("HIGH", "MED")
+        if upcoming and preview_worthy:
+            screen = CalendarEventScreen(
+                event,
+                on_fetch=lambda: self._fetch_event_expected(event),
+                can_fetch=claude_ready,
+                fetch_label="Preview expected impact",
+                fetch_pending_message="Fetching consensus + expected impact…",
+            )
+        else:
+            screen = CalendarEventScreen(
+                event,
+                on_fetch=lambda: self._fetch_event_actuals(event),
+                can_fetch=claude_ready,
+            )
         self._calendar_event_screen = screen
         self.push_screen(screen, self._on_calendar_event_closed)
 
@@ -820,6 +833,23 @@ class GoldSilverApp(App[None]):
             screen.update_event(updated)
         else:
             screen.set_status("No released figures found yet.", style="#ff9b6b")
+
+    def _fetch_event_expected(self, event: CalendarEvent) -> None:
+        self.run_worker(
+            self._run_fetch_event_expected(event),
+            exclusive=False,
+            group="cal-expected-now",
+        )
+
+    async def _run_fetch_event_expected(self, event: CalendarEvent) -> None:
+        updated = await self._calendar_service.fetch_expected_now(event)
+        screen = self._calendar_event_screen
+        if screen is None:
+            return
+        if updated is not None:
+            screen.update_event(updated)
+        else:
+            screen.set_status("Couldn't find a consensus forecast.", style="#ff9b6b")
 
     def _check_price_alerts(self, tick: Tick) -> None:
         levels = self._settings.price_alerts.get(tick.symbol)

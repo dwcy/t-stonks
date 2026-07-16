@@ -76,6 +76,7 @@ _IMPACT_STYLE = {
 _IMPACT_NONE_LABEL = "·   "
 _IMPACT_NONE_STYLE = "#5a5a6a"
 _RELEASED_STYLE = "#7dff8c"
+_EXPECTED_STYLE = "#ffd56b"
 _TITLE_MAX = 34
 
 
@@ -312,9 +313,12 @@ class CalendarPanel(Horizontal):
             else event.title[: _TITLE_MAX - 3] + "..."
         )
         text.append(title, style=title_style)
-        suffix = self._released_suffix(event)
+        suffix = self._figures_suffix(event)
         if suffix is not None:
-            text.append(suffix, style=("dim " if passed else "") + _RELEASED_STYLE)
+            figures_style = (
+                _RELEASED_STYLE if event.actual is not None else _EXPECTED_STYLE
+            )
+            text.append(suffix, style=("dim " if passed else "") + figures_style)
         elif event_key(event) in self._fetching:
             frame = _SPINNER_FRAMES[self._spinner_frame]
             text.append(f"  {frame} fetching…", style="#ffd56b")
@@ -329,9 +333,10 @@ class CalendarPanel(Horizontal):
             text.stylize(Style(meta={"cal_event": event}), start, end)
 
     @staticmethod
-    def _released_suffix(event: CalendarEvent) -> str | None:
-        if event.status != "RELEASED" and event.actual is None:
-            return None
+    def _figures_suffix(event: CalendarEvent) -> str | None:
+        # Shows released actuals, or — once a preview has been fetched — the
+        # forecast/previous inline so the expected number is visible without
+        # opening the event.
         parts: list[str] = []
         if event.actual:
             parts.append(f"act {event.actual}")

@@ -15,6 +15,7 @@ from goldsilver.data.calendar_actuals import (
     same_day_titles,
 )
 from goldsilver.data.calendar_actuals_store import CalendarActualsStore, event_key
+from goldsilver.data.calendar_expectations import fetch_expected
 from goldsilver.data.calendar_static import load_static_events, window_around
 from goldsilver.data.fred import fred_api_key
 from goldsilver.data.stock_calendar_events import fetch_stock_events
@@ -121,22 +122,41 @@ class CalendarService:
 
     async def fetch_actuals_now(self, event: CalendarEvent) -> CalendarEvent | None:
         stored = self._actuals_store.get(event)
-        if stored is not None:
+        # A cached record only short-circuits if it carries a released actual; a
+        # forward-looking preview (actual is None) must not block the real fetch.
+        if stored is not None and stored.actual is not None:
             return await self._apply_updated(stored.apply_to(event))
         if find_claude() is None:
             return None
         self._ensure_fetcher()
         assert self._actuals_fetcher is not None
-        siblings = (
-            same_day_titles(self._last_snapshot, event)
-            if self._last_snapshot is not None
-            else ()
-        )
+        siblings = self._siblings_for(event)
         updated = await self._actuals_fetcher.fetch(event, siblings)
         if updated is None:
             return None
         self._actuals_store.put(updated)
         return await self._apply_updated(updated)
+
+    async def fetch_expected_now(self, event: CalendarEvent) -> CalendarEvent | None:
+        stored = self._actuals_store.get(event)
+        if stored is not None:
+            return await self._apply_updated(stored.apply_to(event))
+        if find_claude() is None:
+            return None
+        cfg = self._actuals_provider() if self._actuals_provider is not None else None
+        timeout = cfg.actuals_timeout_seconds if cfg is not None else 180
+        updated = await fetch_expected(
+            event, self._siblings_for(event), timeout_seconds=timeout
+        )
+        if updated is None:
+            return None
+        self._actuals_store.put(updated)
+        return await self._apply_updated(updated)
+
+    def _siblings_for(self, event: CalendarEvent) -> tuple[str, ...]:
+        if self._last_snapshot is None:
+            return ()
+        return same_day_titles(self._last_snapshot, event)
 
     async def _apply_updated(self, updated: CalendarEvent) -> CalendarEvent:
         base = self._last_snapshot
