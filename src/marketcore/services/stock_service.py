@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import yfinance as yf
 from pydantic import ValidationError
 
 from marketcore.models import Bar
-from marketcore.models_macro import DividendInfo, StockQuote
+from marketcore.models_macro import DividendInfo, StockCalendar, StockQuote
 from marketcore.services.base import PollingService
 
 StockHandler = Callable[[list[StockQuote]], Awaitable[None] | None]
@@ -245,4 +245,35 @@ def fetch_dividend_info(sym: str) -> DividendInfo:
         amount=amount,
         payment_date=payment_date,
         is_forward_looking=False,
+    )
+
+
+def _as_date(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return None
+
+
+def fetch_stock_calendar(sym: str) -> StockCalendar:
+    """Forward-looking earnings / ex-dividend / dividend-pay dates for `sym`.
+
+    Reads yfinance's `.calendar` (a dict of upcoming corporate dates). Unlike
+    `fetch_dividend_info` (historical `.dividends`), this is the forward calendar,
+    so it can carry a *next* earnings date and *next* ex-dividend "x-day"."""
+    try:
+        cal = yf.Ticker(sym).calendar
+    except Exception:
+        cal = None
+    if not isinstance(cal, dict):
+        return StockCalendar(ticker=sym)
+    raw_earnings = cal.get("Earnings Date")
+    earnings = raw_earnings if isinstance(raw_earnings, list) else [raw_earnings]
+    earnings_dates = tuple(d for d in (_as_date(e) for e in earnings) if d is not None)
+    return StockCalendar(
+        ticker=sym,
+        earnings_dates=earnings_dates,
+        ex_dividend_date=_as_date(cal.get("Ex-Dividend Date")),
+        dividend_pay_date=_as_date(cal.get("Dividend Date")),
     )

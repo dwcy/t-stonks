@@ -61,6 +61,7 @@ _SOURCE_STYLE = {
     "FED": "#7dcfff",
     "ECB": "#bb9af7",
     "RIKSBANK": "#ffd56b",
+    "STOCK": "#9ece6a",
 }
 _IMPACT_LABEL = {
     "HIGH": "HIGH",
@@ -322,7 +323,9 @@ class CalendarPanel(Horizontal):
 
     @staticmethod
     def _tag_event(text: Text, start: int, end: int, event: CalendarEvent) -> None:
-        if end > start:
+        # STOCK events (earnings / ex-dividend / pay dates) are display-only — unlike
+        # macro releases, there's no detail/actuals view to open, so leave them untagged.
+        if end > start and event.source != "STOCK":
             text.stylize(Style(meta={"cal_event": event}), start, end)
 
     @staticmethod

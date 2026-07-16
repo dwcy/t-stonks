@@ -55,6 +55,38 @@ def _high_event() -> CalendarEvent:
     )
 
 
+def _stock_event() -> CalendarEvent:
+    today = datetime.now(STOCKHOLM).date()
+    return CalendarEvent(
+        source="STOCK",
+        title="MSFT earnings",
+        scheduled_time=datetime(
+            today.year, today.month, today.day, 12, 0, tzinfo=STOCKHOLM
+        ),
+        all_day=True,
+        importance="HIGH",
+    )
+
+
+@pytest.mark.asyncio
+async def test_stock_event_renders_but_is_not_clickable() -> None:
+    app = _Harness()
+    async with app.run_test() as pilot:
+        panel = app.query_one(CalendarPanel)
+        panel.apply_snapshot(_today_snapshot(_stock_event()))
+        await pilot.pause()
+        rendered = app.query_one("#cal-today", Static).render()
+
+    assert "MSFT earnings" in str(rendered)
+    tagged = [
+        span
+        for span in rendered.spans
+        if not isinstance(span.style, str)
+        and span.style.meta.get("cal_event") is not None
+    ]
+    assert tagged == []
+
+
 @pytest.mark.asyncio
 async def test_today_high_event_renders_impact_tag() -> None:
     app = _Harness()

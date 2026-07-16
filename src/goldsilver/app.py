@@ -201,6 +201,7 @@ class GoldSilverApp(App[None]):
         self._calendar_service = CalendarService(
             handler=self._on_calendar,
             actuals_settings_provider=lambda: self._settings.calendar,
+            stock_tickers_provider=self._calendar_stock_tickers,
             on_fetch_started=self._on_calendar_fetch_started,
             on_fetch_finished=self._on_calendar_fetch_finished,
         )
@@ -994,6 +995,9 @@ class GoldSilverApp(App[None]):
             self._settings.extra_stock_tickers,
             exclude=self._settings.stock_tickers,
         )
+
+    def _calendar_stock_tickers(self) -> list[str]:
+        return [*self._settings.stock_tickers, *self._extra_row_tickers()]
 
     async def _on_stock_quotes(self, quotes: list[StockQuote]) -> None:
         if self._stock_row is not None:

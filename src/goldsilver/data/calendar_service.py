@@ -17,6 +17,7 @@ from goldsilver.data.calendar_actuals import (
 from goldsilver.data.calendar_actuals_store import CalendarActualsStore, event_key
 from goldsilver.data.calendar_static import load_static_events, window_around
 from goldsilver.data.fred import fred_api_key
+from goldsilver.data.stock_calendar_events import fetch_stock_events
 from goldsilver.data.http import make_client
 from goldsilver.data.models_macro import (
     CalendarDay,
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
 
 CalendarHandler = Callable[[CalendarSnapshot], Awaitable[None] | None]
 CalendarSettingsProvider = Callable[[], "CalendarSettings"]
+StockTickersProvider = Callable[[], list[str]]
 FetchStartedHandler = Callable[[str], None]
 FetchFinishedHandler = Callable[[str, bool], None]
 
@@ -70,6 +72,7 @@ class CalendarService:
         fred_key: str | None = None,
         actuals_settings_provider: CalendarSettingsProvider | None = None,
         actuals_store: CalendarActualsStore | None = None,
+        stock_tickers_provider: StockTickersProvider | None = None,
         on_fetch_started: FetchStartedHandler | None = None,
         on_fetch_finished: FetchFinishedHandler | None = None,
     ) -> None:
@@ -77,6 +80,7 @@ class CalendarService:
         self._refresh_interval_s = refresh_interval_s
         self._fred_key = fred_key if fred_key is not None else fred_api_key()
         self._actuals_provider = actuals_settings_provider
+        self._stock_tickers_provider = stock_tickers_provider
         self._actuals_store = actuals_store or CalendarActualsStore()
         self._on_fetch_started = on_fetch_started
         self._on_fetch_finished = on_fetch_finished
@@ -170,12 +174,24 @@ class CalendarService:
 
         static_events = load_static_events(window_start, window_end)
         fred_events = await self._fetch_fred(client, window_start, window_end)
+        stock_events = await self._fetch_stock_events(window_start, window_end)
 
-        all_events = static_events + fred_events
+        all_events = static_events + fred_events + stock_events
         snapshot = self._build_snapshot(today_stk, all_events, status="ok")
         snapshot = self._actuals_store.apply(snapshot)
         self._last_snapshot = snapshot
         await self._emit(snapshot)
+
+    async def _fetch_stock_events(
+        self, window_start: date, window_end: date
+    ) -> list[CalendarEvent]:
+        if self._stock_tickers_provider is None:
+            return []
+        tickers = self._stock_tickers_provider()
+        try:
+            return await fetch_stock_events(tickers, window_start, window_end)
+        except Exception:
+            return []
 
     async def _fetch_fred(
         self,

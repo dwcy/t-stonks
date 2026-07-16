@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
-CalendarSource = Literal["FED", "ECB", "RIKSBANK"]
+CalendarSource = Literal["FED", "ECB", "RIKSBANK", "STOCK"]
 EventImportance = Literal["HIGH", "MED", "LOW"]
 EventStatus = Literal["SCHEDULED", "RELEASED", "CANCELLED", "PASSED"]
 SnapshotStatus = Literal["ok", "stale", "unavailable"]
@@ -447,3 +447,14 @@ class DividendInfo(BaseModel):
     amount: float | None = None
     payment_date: date | None = None
     is_forward_looking: bool = False
+
+
+class StockCalendar(BaseModel):
+    """Forward-looking corporate-calendar dates for a ticker (yfinance `.calendar`)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ticker: str
+    earnings_dates: tuple[date, ...] = ()
+    ex_dividend_date: date | None = None
+    dividend_pay_date: date | None = None
